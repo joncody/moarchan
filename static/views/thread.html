@@ -32,13 +32,12 @@
             </form>
         </div>
         {{ template "blotter" }}
-        <p class="support-moarchan">Please <span data-rt-href="/support" class="blue-text-link">support Moarchan</span> by disabling your ad blocker on *.moarchan.org/*, <span data-rt-href="/self-serve" class="blue-text-link">purchasing a self-serve ad</span>, or <span data-rt-href="/pass" class="blue-text-link">buying a moarchan Pass.</span></p>
+        <p class="support-moarchan">Please <span data-href="/support" class="blue-text-link">support Moarchan</span> by disabling your ad blocker on *.moarchan.org/*, <span data-href="/self-serve" class="blue-text-link">purchasing a self-serve ad</span>, or <span data-href="/pass" class="blue-text-link">buying a moarchan Pass.</span></p>
         <div class="top-container">
             <input class="search-ops" type="text" placeholder="Search OPs..." />
-            <p class="catalog-link">[<span data-rt-href="/catalog" class="blue-text-link">Catalog</span>]</p>
+            <p class="catalog-link">[<span data-href="/catalog" class="blue-text-link">Catalog</span>]</p>
         </div>
         <div class="board">
-            {{ range . }}
             <div id="post-{{ .hash }}" class="thread">
                 <div class="post-image-metadata op">
                     File: <a class="post-image-link blue-text-link op" href="/static/images/uploads/{{ .file_name }}" alt="{{ .file_name }}" title="{{ .file_name }}" target="_blank">{{ .file_name }}</a>
@@ -112,7 +111,6 @@
                 </div>
                 <div class="spacer"></div>
             </div>
-            {{ end }}
         </div>
         <div class="bottom-container">
             <div class="bottom-right-side">

@@ -36,10 +36,10 @@
             </form>
         </div>
         {{ template "blotter" }}
-        <p class="support-moarchan">Please <span data-rt-href="/support" class="blue-text-link">support Moarchan</span> by disabling your ad blocker on *.moarchan.org/*, <span data-rt-href="/self-serve" class="blue-text-link">purchasing a self-serve ad</span>, or <span data-rt-href="/pass" class="blue-text-link">buying a moarchan Pass.</span></p>
+        <p class="support-moarchan">Please <span data-href="/support" class="blue-text-link">support Moarchan</span> by disabling your ad blocker on *.moarchan.org/*, <span data-href="/self-serve" class="blue-text-link">purchasing a self-serve ad</span>, or <span data-href="/pass" class="blue-text-link">buying a moarchan Pass.</span></p>
         <div class="top-container">
             <input class="search-ops" type="text" placeholder="Search OPs..." />
-            <p class="catalog-link">[<span data-rt-href="/catalog" class="blue-text-link">Catalog</span>]</p>
+            <p class="catalog-link">[<span data-href="/catalog" class="blue-text-link">Catalog</span>]</p>
         </div>
         <div class="board">
             {{ range . }}
@@ -60,11 +60,11 @@
                     <span class="post-subject op">{{ .subject }}</span>
                     <span class="post-username op">{{ .name }}</span>
                     <span class="post-date op">{{ .timestamp }}</span>
-                    <span class="post-link-to red-text-link op" title="Link to this post" data-rt-href="/{{ .topic }}/thread/{{ .hash }}">No.</span>
+                    <span class="post-link-to red-text-link op" title="Link to this post" data-href="/{{ .topic }}/thread/{{ .hash }}">No.</span>
                     <span class="post-reply-to red-text-link op" title="Reply to this post" data-thread="{{ .hash }}">{{ .hash }}</span>
                     <img class="post-thumbtack op" src="/static/images/thumbtack.gif" alt="Sticky" title="Sticky" />
                     <img class="post-lock op" src="/static/images/lock.gif" alt="Closed" title="Closed" />
-                    <span class="post-reply-to-text op">[<span class="blue-text-link" data-rt-href="/{{ .topic }}/thread/{{ .hash }}">Reply</span>]</span>
+                    <span class="post-reply-to-text op">[<span class="blue-text-link" data-href="/{{ .topic }}/thread/{{ .hash }}">Reply</span>]</span>
                     <div class="post-options op" title="Post menu">
                         <span class="post-options-arrow op" data-post="{{ .hash }}"></span>
                         <ul id="post-menu-{{ .hash }}" class="post-options-menu hide op">
@@ -85,7 +85,7 @@
                             <img class="post-show-hide-replies plus" data-post="{{ .hash }}" src="/static/images/show-hide-thread-plus-red.png" alt="Plus" title="Plus" />
                             <img class="post-show-hide-replies minus" data-post="{{ .hash }}" src="/static/images/show-hide-thread-minus-red.png" alt="Minus" title="Minus" />
                         </div>
-                        <p class="post-summary">0 posts omitted. <span class="blue-text-link" data-rt-href="/{{ .topic }}/thread/{{ .hash }}">Click here</span> to view.</p>
+                        <p class="post-summary">0 posts omitted. <span class="blue-text-link" data-href="/{{ .topic }}/thread/{{ .hash }}">Click here</span> to view.</p>
                     </div>
                     {{ range .replies }}
                     <div class="reply-container">
