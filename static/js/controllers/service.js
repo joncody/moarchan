@@ -355,7 +355,7 @@ wsframe.controllers.service = function service(global, view) {
         var tagged = arg;
 
         gg('.highlight').remClass('highlight');
-        tagged.getRaw(0).scrollIntoView();
+        tagged.raw(0).scrollIntoView();
         if (!tagged.hasClass('thread')) {
             tagged.addClass('highlight');
         }
@@ -374,13 +374,14 @@ wsframe.controllers.service = function service(global, view) {
 
     function hoverOverTag(e, node, arg) {
         var tagged = arg,
-            inview = isElementInViewport(tagged.getRaw(0)),
+            inview = isElementInViewport(tagged.raw(0)),
             replyHeight = global.parseInt(tagged.css('height'), 10),
             replyWidth = global.parseInt(tagged.css('width'), 10),
             top = e.clientY - 20 > replyHeight ? e.pageY - replyHeight - 20 : e.pageY + 20,
             left = global.screen.width - e.pageX - 20 > replyWidth ? e.pageX + 20 : 10,
             clone;
 
+        console.log("k");
         if (inview) {
             tagged.addClass('highlight-hover');
         } else {
@@ -397,12 +398,12 @@ wsframe.controllers.service = function service(global, view) {
     }
 
     gg('.post-tag').each(function (node) {
-        var tagged = gg('#post-' + node.getAttribute('data-tag'));
+        var tagged = gg('#post-' + node.data('tag'));
 
         if (!tagged.hasClass('thread')) {
-            gg(node).on('mouseover', hoverOverTag, false, tagged);
+            node.on('mouseover', hoverOverTag, false, tagged);
         }
-        gg(node).on('click', goToTaggedPost, false, tagged);
+        node.on('click', goToTaggedPost, false, tagged);
     });
 
     function addThread(buffer) {
@@ -532,12 +533,12 @@ wsframe.controllers.service = function service(global, view) {
             replyEl.selectAll('.post-options-arrow').on('click', showPostOptions, false);
             replyEl.selectAll('.post-reply-to').on('click', openReplyBox, false);
             gg('#post-' + data.thread).selectAll('.post-tag').each(function (node) {
-                var tagged = gg('#post-' + node.getAttribute('data-tag'));
+                var tagged = gg('#post-' + node.data('tag'));
 
                 if (!tagged.hasClass('thread')) {
-                    gg(node).on('mouseover', hoverOverTag, false, tagged);
+                    node.on('mouseover', hoverOverTag, false, tagged);
                 }
-                gg(node).on('click', goToTaggedPost, false, tagged);
+                node.on('click', goToTaggedPost, false, tagged);
             });
             initReplies(data.thread);
         }
