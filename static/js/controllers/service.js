@@ -381,7 +381,6 @@ wsframe.controllers.service = function service(global, view) {
             left = global.screen.width - e.pageX - 20 > replyWidth ? e.pageX + 20 : 10,
             clone;
 
-        console.log("k");
         if (inview) {
             tagged.addClass('highlight-hover');
         } else {
