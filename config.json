@@ -1,0 +1,72 @@
+{
+    "port": "8080",
+    "hashkey": "moar-secret",
+    "blockkey": "more-moar-secret",
+    "cookiename": "moarchan",
+    "database": {
+        "user": "moarchan",
+        "password": "moarchan",
+        "name": "moarchan"
+    },
+    "routes": [
+        {
+            "route": "/news",
+            "template": "news"
+        },
+        {
+            "route": "/blog",
+            "template": "blog"
+        },
+        {
+            "route": "/faq",
+            "template": "faq"
+        },
+        {
+            "route": "/rules",
+            "template": "rules"
+        },
+        {
+            "route": "/advertise",
+            "template": "advertise"
+        },
+        {
+            "route": "/press",
+            "template": "press"
+        },
+        {
+            "route": "/about",
+            "template": "about"
+        },
+        {
+            "route": "/feedback",
+            "template": "feedback"
+        },
+        {
+            "route": "/legal",
+            "template": "legal"
+        },
+        {
+            "route": "/contact",
+            "template": "contact"
+        },
+        {
+            "route": "^/([A-Za-z0-9]+)/thread/([A-Za-z0-9]+)$",
+            "table": "$1",
+            "key": "$2",
+            "template": "thread",
+            "controllers": "service"
+        },
+        {
+            "route": "^/([A-Za-z0-9]+)[\/]?$",
+            "table": "$1",
+            "template": "topic",
+            "controllers": "service"
+        },
+        {
+            "route": "^/$",
+            "table": "main",
+            "template": "main",
+            "controllers": "main"
+        }
+    ]
+}
