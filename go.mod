@@ -4,8 +4,8 @@ go 1.23.0
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/joncody/wsframe v0.0.0-20250526052349-6edb1d9d3f80
-	github.com/joncody/wsrooms v0.0.0-20250524092317-32c13371a674
+	github.com/joncody/wsframe v0.0.0-20250528063017-792c86bce0b5
+	github.com/joncody/wsrooms v0.0.0-20250528055455-71307912d087
 	github.com/vincent-petithory/dataurl v1.0.0
 )
 
