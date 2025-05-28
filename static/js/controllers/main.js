@@ -1,3 +1,10 @@
+"use strict";
+
+import gg from "./gg.js";
+import wsframe from "./wsframe.js";
+
+const global = globalThis || window || this;
+
 wsframe.controllers.main = function main(global, view) {
     "use strict";
 

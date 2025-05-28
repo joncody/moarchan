@@ -1,3 +1,8 @@
+"use strict";
+
+import gg from "./gg.js";
+import wsframe from "./wsframe.js":
+
 wsframe.controllers.service = function service(global, view) {
     'use strict';
 
@@ -119,7 +124,7 @@ wsframe.controllers.service = function service(global, view) {
         if (!thread.hasClass('show-replies') && replies.length > 5) {
             data.omitted = replies.length - 5;
             data.href = '/' + hashsplit[1] + '/thread/' + hash;
-            thread.select('.post-summary').html(gg.supplant(summary, data));
+            thread.select('.post-summary').html(gg.utils.supplant(summary, data));
         } else {
             thread.select('.post-summary').html('Showing all replies.');
         }
@@ -179,13 +184,13 @@ wsframe.controllers.service = function service(global, view) {
         gg('#reply-box-comment').remData('value');
         gg('#reply-box-file').remData('value');
         gg('#new-post-name').remData('value');
-        if (gg.getById('new-post-subject')) {
+        if (gg.utils.getById('new-post-subject')) {
             gg('#new-post-subject').remData('value');
         }
         gg('#new-post-options').remData('value');
         gg('#new-post-comment').remData('value');
         gg('#new-post-file').remData('value');
-        gg.select('.reply-box-close').click();
+        gg.utils.select('.reply-box-close').click();
     }
 
     function postThread(e) {
@@ -329,7 +334,7 @@ wsframe.controllers.service = function service(global, view) {
                 data.omitted = replies.length - 5;
                 data.href = '/' + hashsplit[1] + '/thread/' + hash;
                 thread.addClass('show-summary');
-                thread.select('.post-summary').html(gg.supplant(summary, data));
+                thread.select('.post-summary').html(gg.utils.supplant(summary, data));
             } else {
                 thread.addClass('show-replies');
             }
@@ -406,7 +411,7 @@ wsframe.controllers.service = function service(global, view) {
     });
 
     function addThread(buffer) {
-        var data = JSON.parse(gg.toStringFromCodes(buffer)),
+        var data = JSON.parse(gg.utils.toStringFromCodes(buffer)),
             htmlString = '<div id="post-{hash}" class="thread">' +
                 '<div class="post-show-hide-icons op">' +
                     '<img class="post-show-hide-thread plus" data-post="{hash}" src="/static/images/show-hide-thread-plus-red.png" alt="Plus" title="Plus" />' +
@@ -454,8 +459,8 @@ wsframe.controllers.service = function service(global, view) {
             thread,
             threadEl;
 
-        if (data.hash && !gg.getById('post-' + data.hash)) {
-            thread = gg.supplant(htmlString, data);
+        if (data.hash && !gg.utils.getById('post-' + data.hash)) {
+            thread = gg.utils.supplant(htmlString, data);
             gg('.board').insert('beforeend', thread);
             threadEl = gg('#post-' + data.hash);
             threadEl.selectAll('.post-show-hide-thread').on('click', toggleThread, false);
@@ -470,7 +475,7 @@ wsframe.controllers.service = function service(global, view) {
     }
 
     function addReply(buffer) {
-        var data = JSON.parse(gg.toStringFromCodes(buffer)),
+        var data = JSON.parse(gg.utils.toStringFromCodes(buffer)),
             htmlString =
             '<div class="reply-container">' +
                 '<div class="reply-wrapper">' +
@@ -509,10 +514,10 @@ wsframe.controllers.service = function service(global, view) {
             reply,
             replyEl;
 
-        if (data.hash && !gg.getById('post-' + data.hash)) {
+        if (data.hash && !gg.utils.getById('post-' + data.hash)) {
             data.tagging.forEach(function (tag) {
                 var op = tag === data.thread ? ' op' : '',
-                    el = gg.supplant('<span class="post-tag blue-text-link' + op + '" data-tag="{hash}">&gt;&gt;{hash}</span>', data);
+                    el = gg.utils.supplant('<span class="post-tag blue-text-link' + op + '" data-tag="{hash}">&gt;&gt;{hash}</span>', data);
 
                 gg('#post-' + tag + ' .post-header').insert('beforeend', el);
             });
@@ -524,7 +529,7 @@ wsframe.controllers.service = function service(global, view) {
                 htmlString += midString;
             }
             htmlString += endString;
-            reply = gg.supplant(htmlString, data);
+            reply = gg.utils.supplant(htmlString, data);
             gg('#post-' + data.thread + ' .thread-container').insert('beforeend', reply);
             replyEl = gg('#post-' + data.hash);
             replyEl.selectAll('.hide-post').on('click', hidePost, false);
