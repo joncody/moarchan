@@ -1,7 +1,7 @@
 "use strict";
 
-import gg from "./gg.js";
-import wsframe from "./wsframe.js";
+import gg from "../gg.js";
+import wsframe from "../wsframe.js";
 
 wsframe.controllers.service = function service(global, view) {
     'use strict';
