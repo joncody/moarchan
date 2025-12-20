@@ -1,8 +1,9 @@
 "use strict";
 
-import gg from "./gg.js";
+import betterview from "./betterview.js";
+import emitter from "./emitter.js";
+import utils from "./utils.js";
 
-const global = globalThis || window || this;
 const rooms = {};
 const reserved = ["open", "close", "joined", "join", "leave", "left"];
 let socket;
@@ -21,28 +22,27 @@ function buildMessage(room, event, dst, src, payload) {
         src = "";
     }
     payloadlen = payload.byteLength || payload.length || 0;
-    data = gg.betterview(room.length + event.length + dst.length + src.length + payloadlen + 20)
-        .writeUint32(room.length).writeString(room)
-        .writeUint32(event.length).writeString(event)
-        .writeUint32(dst.length).writeString(dst)
-        .writeUint32(src.length).writeString(src)
-        .writeUint32(payloadlen);
+    data = betterview(new ArrayBuffer(room.length + event.length + dst.length + src.length + payloadlen + 20));
+    data.writeUint32(room.length).writeString(room);
+    data.writeUint32(event.length).writeString(event);
+    data.writeUint32(dst.length).writeString(dst);
+    data.writeUint32(src.length).writeString(src);
+    data.writeUint32(payloadlen);
     if (typeof payload === "string") {
         data.writeString(payload);
     } else {
         data.writeBytes(payload);
     }
-    return data.seek(0).getBytes();
+    return data.rewind().getBytes();
 }
 
 function getRoom(name) {
-    const room = gg.emitter();
+    const room = emitter();
     const store = {
         open: false,
         id: "",
         members: []
     };
-    let initdata;
 
     if (typeof name !== "string") {
         return console.warn("Room name must be a string");
@@ -58,7 +58,7 @@ function getRoom(name) {
     };
 
     room.members = function () {
-        return gg.utils.copy(store.members);
+        return utils.copy(store.members);
     };
 
     room.id = function () {
@@ -88,9 +88,11 @@ function getRoom(name) {
         if (roomname === "root") {
             return console.warn("Root room is always joined.");
         }
-        return rooms.hasOwnProperty(roomname)
+        return (
+            rooms.hasOwnProperty(roomname)
             ? rooms[roomname]
-            : getRoom(roomname);
+            : getRoom(roomname)
+        );
     };
 
     room.leave = function () {
@@ -102,18 +104,17 @@ function getRoom(name) {
 
     room.parse = function (packet) {
         let index;
-        let data;
 
         switch (packet.event) {
         case "join":
             store.id = packet.src;
-            store.members = JSON.parse(gg.utils.toStringFromCodes(packet.payload));
+            store.members = JSON.parse(utils.stringFromCodes(packet.payload));
             store.open = true;
             room.emit("open");
-            socket.send(buildMessage(name, "joined", "", store.id, store.id))
+            socket.send(buildMessage(name, "joined", "", store.id, store.id));
             break;
         case "joined":
-            packet.payload = gg.utils.toStringFromCodes(packet.payload);
+            packet.payload = utils.stringFromCodes(packet.payload);
             index = store.members.indexOf(packet.payload);
             if (index === -1) {
                 store.members.push(packet.payload);
@@ -129,7 +130,7 @@ function getRoom(name) {
             delete rooms[name];
             break;
         case "left":
-            packet.payload = gg.utils.toStringFromCodes(packet.payload);
+            packet.payload = utils.stringFromCodes(packet.payload);
             index = store.members.indexOf(packet.payload);
             if (index !== -1) {
                 store.members.splice(index, 1);
@@ -142,7 +143,7 @@ function getRoom(name) {
     };
 
     room.clearListeners = function (exceptions) {
-        if (!gg.utils.isArray(exceptions)) {
+        if (!Array.isArray(exceptions)) {
             exceptions = [];
         }
         Object.keys(room.events).forEach(function (event) {
@@ -165,14 +166,14 @@ function getRoom(name) {
             });
         };
         room.rooms = function () {
-            return gg.utils.copy(rooms);
+            return global.structuredClone(rooms);
         };
     }
 
     return Object.freeze(room);
 }
 
-export default function wsrooms(url) {
+const wsrooms = function (url) {
     const root = getRoom("root");
 
     if (typeof url !== "string") {
@@ -182,7 +183,7 @@ export default function wsrooms(url) {
     socket.binaryType = "arraybuffer";
 
     socket.onmessage = function (e) {
-        const data = gg.betterview(e.data);
+        const data = betterview(e.data);
         const packet = {
             room: data.getString(data.getUint32()),
             event: data.getString(data.getUint32()),
@@ -208,4 +209,6 @@ export default function wsrooms(url) {
     };
 
     return root;
-}
+};
+
+export default Object.freeze(wsrooms);

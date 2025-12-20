@@ -255,7 +255,7 @@ function toCamelCase(value) {
     });
 }
 
-function toCodesFromString(value) {
+function codesFromString(value) {
     const codes = [];
 
     toArray(value).forEach(function (char) {
@@ -302,7 +302,7 @@ function toUint8(value) {
             ? [value.raw()]
             : value.raw());
     } else if (isString(value)) {
-        uint8 = new Uint8Array(toCodesFromString(value));
+        uint8 = new Uint8Array(codesFromString(value));
     } else if (isNumber(value) || isArray(value) || isArrayLike(value) || isTypedArray(value) || isBuffer(value)) {
         uint8 = new Uint8Array(value);
     } else {
@@ -315,7 +315,7 @@ function toBuffer(value) {
     return toUint8(value).buffer;
 }
 
-function toStringFromCodes(value) {
+function stringFromCodes(value) {
     let string = "";
 
     toArray(value).forEach(function (char) {
@@ -565,13 +565,13 @@ export default Object.freeze({
     isTypedArray,
     toArray,
     toCamelCase,
-    toCodesFromString,
+    codesFromString,
     toFloat,
     toHyphenated,
     toInt,
     toUint8,
     toBuffer,
-    toStringFromCodes,
+    stringFromCodes,
     copy,
     each,
     extend,

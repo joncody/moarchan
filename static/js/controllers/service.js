@@ -81,7 +81,6 @@ wsframe.controllers.service = function service(global, view) {
         room;
 
     gg('.topic-header').html('/' + hashsplit[1] + '/ - ' + topicsMap[hashsplit[1]]);
-    wsframe.hrefListener();
     room = wsframe.socket.join(hashsplit[1]);
 
     function toggleBlotter(e) {
