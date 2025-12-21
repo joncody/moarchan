@@ -1,0 +1,90 @@
+@import "reset.css";
+@import "fonts/roboto/roboto.css";
+@import "fonts/opensans/opensans.css";
+
+[data-base] {
+    height: 100%;
+    font-family: "roboto", "opensans", "sans";
+}
+
+.form {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    padding: 0 2rem;
+    background: #2d2d2d;
+}
+.form-input {
+    background-color: #333;
+    border: 1px solid #2d2d2d;
+    color: #dedede;
+    font-size: 1.6rem;
+    padding: 1rem 2rem;
+    max-width: 48rem;
+    width: 100%;
+    max-height: 10rem;
+    margin: 0.3rem;
+    transition: all 123ms ease-in-out 0ms;
+}
+.form-input:focus {
+    background-color: #2d2d2d;
+    color: #f9f9f9;
+    border: 1px solid #d64937;
+    box-shadow: 1px 1px 3px 0 rgba(0,0,0,0.5) inset;
+}
+.form-input.collapsed {
+    margin-bottom: 0rem;
+    margin-top: 0rem;
+    padding: 0rem 2rem;
+    max-height: 0rem;
+    border-top-width: 0rem;
+    border-bottom-width: 0rem;
+}
+.form-footer {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    max-width: 48rem;
+    width: 100%;
+    margin: 0.3rem;
+}
+.form-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #dedede;
+    background-color: #333;
+    border: 1px solid #2d2d2d;
+    font-size: 1.6rem;
+    font-family: "roboto", "opensans", "sans";
+    font-weight: 400;
+    padding: 1rem 2rem;
+    transition: all 123ms ease-in-out 0ms;
+}
+.form-button:before {
+    font-family: "Font Awesome 5 Free";
+    padding-right: 0.5rem;
+    font-weight: 900;
+    line-height: 1.5;
+}
+.form-button:focus {
+    background-color: #d64937;
+    color: #f9f9f9;
+}
+.form-button:hover {
+    background-color: #d64937;
+    color: #f9f9f9;
+}
+.form-toggler {
+    color: #d64937;
+    font-size: 1.3rem;
+    cursor: pointer;
+    width: 10rem;
+    transition: all 123ms ease-in-out 0ms;
+}
+.form-toggler:hover {
+    text-decoration: underline;
+}

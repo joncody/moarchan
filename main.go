@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/joncody/wsframe"
+	"moarchan/wsframe"
 	"github.com/joncody/wsrooms"
 	"github.com/vincent-petithory/dataurl"
 )
