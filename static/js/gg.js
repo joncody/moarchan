@@ -211,30 +211,6 @@ function gg(selector) {
             });
             return api;
         },
-        appendTo: function (selector) {
-            const parents = toElements(selector);
-            if (parents.length === 0) {
-                return api;
-            }
-            elements.forEach((el) => {
-                parents.forEach((parent) => {
-                    parent.appendChild(el);
-                });
-            });
-            return api;
-        },
-        prependTo: function (selector) {
-            const parents = toElements(selector);
-            if (parents.length === 0) {
-                return api;
-            }
-            elements.forEach((el) => {
-                parents.forEach((parent) => {
-                    parent.insertBefore(el, parent.firstChild);
-                });
-            });
-            return api;
-        },
 
         // === Styling ===
         css: function (name, value) {
