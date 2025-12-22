@@ -109,7 +109,7 @@ function dom(selector) {
         },
         hasClass: function (token) {
             if (typeof token !== "string" || !token.trim()) {
-                return api;
+                return false;
             }
             return elements.every((el) => el.classList.contains(token));
         },
@@ -179,33 +179,24 @@ function dom(selector) {
             return dom(elements.flatMap((el) => [...el.children]));
         },
         parents: function () {
-            return dom(elements.map((el) => el.parentElement));
+            return dom(elements.map((el) => el.parentElement).filter(Boolean));
         },
         select: function (token) {
             if (typeof token !== "string") {
                 return api;
             }
-            const nodes = [];
-            elements.forEach(function (el) {
-                nodes.push(el.querySelector(token));
-            });
-            return dom(nodes);
+            return dom([...new Set(elements.map((el) => el.querySelector(token)).filter(Boolean))]);
         },
         selectAll: function (token) {
             if (typeof token !== "string") {
                 return api;
             }
-            const nodes = [];
-            elements.forEach(function (el) {
-                nodes.push(...el.querySelectorAll(token));
-            });
-            return dom(nodes);
+            return dom([...new Set(elements.flatMap((el) => [...el.querySelectorAll(token)]))]);
         },
 
         // === DOM Manipulation ===
         clone: function (deep = true) {
-            const clones = elements.map((el) => el.cloneNode(deep));
-            return dom(clones);
+            return dom(elements.map((el) => el.cloneNode(deep)));
         },
         remove: function () {
             elements.forEach((el) => {
@@ -273,7 +264,7 @@ function dom(selector) {
             if (typeof type === "string" && !fn) {
                 elements.forEach((el) => {
                     const register = eventRegistry.get(el);
-                    if (register?.[type]) {
+                    if (register && register[type]) {
                         register[type].forEach(({fn: f, capture: c}) => {
                             el.removeEventListener(type, f, c);
                         });
@@ -288,7 +279,7 @@ function dom(selector) {
             if (typeof type === "string" && typeof fn === "function") {
                 elements.forEach((el) => {
                     const register = eventRegistry.get(el);
-                    if (register?.[type]) {
+                    if (register && register[type]) {
                         register[type] = register[type].filter(({fn: f, capture: c}) => {
                             if (f === fn && c === capture) {
                                 el.removeEventListener(type, f, c);
@@ -316,7 +307,7 @@ function dom(selector) {
                 const wrapper = (event) => {
                     el.removeEventListener(type, wrapper, capture);
                     const register = eventRegistry.get(el);
-                    if (register?.[type]) {
+                    if (register && register[type]) {
                         register[type] = register[type].filter((h) => h.fn !== wrapper);
                         if (register[type].length === 0) {
                             delete register[type];
