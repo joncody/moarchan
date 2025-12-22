@@ -27,8 +27,7 @@ const VALID_TAGS = new Set([
   "time", "title", "tr", "track", "u", "ul", "var", "video", "wbr"
 ]);
 
-// GG
-const gg = function (selector) {
+function toElements(selector) {
     const elements = [];
 
     if (typeof selector === "string") {
@@ -39,28 +38,76 @@ const gg = function (selector) {
         elements.push(...selector);
     } else if (Array.isArray(selector) && selector.every(utils.isNode)) {
         elements.push(...selector);
-    } else {
-        throw new TypeError("gg requires a selector string, Node, NodeList, or an array of Nodes");
     }
+    return elements;
+}
 
+// GG
+function gg(selector) {
+    const elements = toElements(selector);
     const api = {
-        addElement: function (val) {
-            if (typeof val === "string") {
-                elements.push(...document.querySelectorAll(val));
-            } else if (utils.isNode(val)) {
-                elements.push(val);
-            } else if (utils.objectType(val) === "nodelist") {
-                elements.push(...val);
-            } else if (Array.isArray(val) && val.every(utils.isNode)) {
-                elements.push(...val);
+        // === Core / Inspection ===
+        get: function (index) {
+            if (typeof index === "number" && index >= 0 && index < elements.length) {
+                return elements[index];
             }
+            return [...elements];
+        },
+        length: function () {
+            return elements.length;
+        },
+        each: function (fn) {
+            elements.forEach(fn, api);
             return api;
         },
-        removeElement: function (index) {
+
+        // === Collection Management ===
+        addItem: function (val) {
+            const newElements = toElements(val);
+            elements.push(...newElements);
+            return api;
+        },
+        removeItem: function (index) {
             if (typeof index === "number" && index >= 0 && index < elements.length) {
                 elements.splice(index, 1);
             }
             return api;
+        },
+
+        // === Attributes & Classes ===
+        attr: function (name, value) {
+            if (typeof name !== "string") {
+                return api;
+            }
+            if (value === undefined) {
+                return elements.map((el) => el.getAttribute(name));
+            }
+            if (value === null) {
+                elements.forEach((el) => el.removeAttribute(name));
+            } else {
+                elements.forEach((el) => el.setAttribute(name, value));
+            }
+            return api;
+        },
+        data: function (name, value) {
+            if (typeof name !== "string") {
+                return api;
+            }
+            if (value === undefined) {
+                return elements.map((el) => el.dataset[name]);
+            }
+            if (value === null) {
+                elements.forEach((el) => delete el.dataset[name]);
+            } else {
+                elements.forEach((el) => el.dataset[name] = value);
+            }
+            return api;
+        },
+        hasClass: function (token) {
+            if (typeof token !== "string" || !token.trim()) {
+                return api;
+            }
+            return elements.every((el) => el.classList.contains(token));
         },
         addClass: function (token) {
             if (typeof token !== "string" || !token.trim()) {
@@ -95,130 +142,40 @@ const gg = function (selector) {
             });
             return api;
         },
-        hasClass: function (token) {
-            if (typeof token !== "string" || !token.trim()) {
-                return api;
-            }
-            return elements.every((el) => {
-                return el.classList.contains(token);
-            });
-        },
         getClassName: function () {
             return elements.map((el) => el.className);
         },
-        attr: function (name, value) {
-            if (typeof name !== "string") {
+
+        // === Content ===
+        text: function (value) {
+            if (value === undefined) {
+                return elements.map((el) => el.textContent);
+            }
+            if (typeof value !== "string") {
                 return api;
             }
-            if (value === undefined) {
-                return elements.map((el) => el.getAttribute(name));
-            }
-            if (value === null) {
-                elements.forEach((el) => el.removeAttribute(name));
-            } else {
-                elements.forEach((el) => el.setAttribute(name, value));
-            }
+            elements.forEach((el) => {
+                el.textContent = value;
+            });
             return api;
-        },
-        children: function () {
-            return gg(elements.flatMap((el) => [...el.children]));
-        },
-        clone: function (deep = true) {
-            const clones = elements.map((el) => el.cloneNode(deep));
-            return gg(clones);
-        },
-        data: function (name, value) {
-            if (typeof name !== "string") {
-                return api;
-            }
-            if (value === undefined) {
-                return elements.map((el) => el.dataset[name]);
-            }
-            if (value === null) {
-                elements.forEach((el) => delete el.dataset[name]);
-            } else {
-                elements.forEach((el) => el.dataset[name] = value);
-            }
-            return api;
-        },
-        each: function (fn) {
-            elements.forEach(fn);
-            return api;
-        },
-        get: function (index) {
-            if (typeof index === "number" && index >= 0 && index < elements.length) {
-                return elements[index];
-            }
-            return [...elements];
         },
         html: function (value) {
             if (value === undefined) {
                 return elements.map((el) => el.innerHTML);
             }
-            if (typeof value !== "string") {
+            if ((typeof value !== "string")) {
                 return api;
             }
             elements.forEach((el) => el.innerHTML = value);
             return api;
         },
-        length: function () {
-            return elements.length;
-        },
-        off: function (type, fn, capture = false) {
-            if (typeof type !== "string" || typeof fn !== "function") {
-                return api;
-            }
-            elements.forEach((el) => el.removeEventListener(type, fn, capture));
-            return api;
-        },
-        on: function (type, fn, capture = false) {
-            if (typeof type !== "string" || typeof fn !== "function") {
-                return api;
-            }
-            elements.forEach((el) => el.addEventListener(type, fn, capture));
-            return api;
-        },
-        once: function (type, fn, capture = false) {
-            if (typeof type !== "string" || typeof fn !== "function") {
-                return api;
-            }
-            elements.forEach((el) => {
-                const onceFn = function (event) {
-                    el.removeEventListener(type, onceFn, capture);
-                    fn(event, el);
-                };
-                el.addEventListener(type, onceFn, capture);
-            });
-            return api;
+
+        // === DOM Traversal ===
+        children: function () {
+            return gg(elements.flatMap((el) => [...el.children]));
         },
         parents: function () {
             return gg(elements.map((el) => el.parentElement));
-        },
-        css: function (name, value) {
-            if (typeof name !== "string") {
-                return api;
-            }
-            const camelName = utils.camelCase(name);
-            const kebabName = utils.kebabCase(name);
-            if (value === undefined) {
-                return elements.map((el) => {
-                    return global.getComputedStyle(el).getPropertyValue(kebabName) || '';
-                });
-            }
-            if (value === null) {
-                elements.forEach((el) => el.style.removeProperty(kebabName));
-            } else {
-                elements.forEach((el) => el.style[camelName] = value);
-            }
-            return api;
-        },
-        remove: function () {
-            elements.forEach((el) => {
-                if (el.parentNode) {
-                    el.parentNode.removeChild(el);
-                }
-            });
-            return api;
         },
         select: function (token) {
             if (typeof token !== "string") {
@@ -240,22 +197,96 @@ const gg = function (selector) {
             });
             return gg(nodes);
         },
-        text: function (value) {
-            if (value === undefined) {
-                return elements.map((el) => el.textContent);
-            }
-            if (typeof value !== "string") {
+
+        // === DOM Manipulation ===
+        clone: function (deep = true) {
+            const clones = elements.map((el) => el.cloneNode(deep));
+            return gg(clones);
+        },
+        remove: function () {
+            elements.forEach((el) => {
+                if (el.parentNode) {
+                    el.parentNode.removeChild(el);
+                }
+            });
+            return api;
+        },
+        appendTo: function (selector) {
+            const parents = toElements(selector);
+            if (parents.length === 0) {
                 return api;
             }
             elements.forEach((el) => {
-                el.textContent = value;
+                parents.forEach((parent) => {
+                    parent.appendChild(el);
+                });
+            });
+            return api;
+        },
+        prependTo: function (selector) {
+            const parents = toElements(selector);
+            if (parents.length === 0) {
+                return api;
+            }
+            elements.forEach((el) => {
+                parents.forEach((parent) => {
+                    parent.insertBefore(el, parent.firstChild);
+                });
+            });
+            return api;
+        },
+
+        // === Styling ===
+        css: function (name, value) {
+            if (typeof name !== "string") {
+                return api;
+            }
+            const camelName = utils.camelCase(name);
+            const kebabName = utils.kebabCase(name);
+            if (value === undefined) {
+                return elements.map((el) => {
+                    return global.getComputedStyle(el).getPropertyValue(kebabName) || '';
+                });
+            }
+            if (value === null) {
+                elements.forEach((el) => el.style.removeProperty(kebabName));
+            } else {
+                elements.forEach((el) => el.style[camelName] = value);
+            }
+            return api;
+        },
+
+        // === Events ===
+        on: function (type, fn, capture = false) {
+            if (typeof type !== "string" || typeof fn !== "function") {
+                return api;
+            }
+            elements.forEach((el) => el.addEventListener(type, fn, capture));
+            return api;
+        },
+        off: function (type, fn, capture = false) {
+            if (typeof type !== "string" || typeof fn !== "function") {
+                return api;
+            }
+            elements.forEach((el) => el.removeEventListener(type, fn, capture));
+            return api;
+        },
+        once: function (type, fn, capture = false) {
+            if (typeof type !== "string" || typeof fn !== "function") {
+                return api;
+            }
+            elements.forEach((el) => {
+                const onceFn = function (event) {
+                    el.removeEventListener(type, onceFn, capture);
+                    fn(event, el);
+                };
+                el.addEventListener(type, onceFn, capture);
             });
             return api;
         }
     };
-
     return Object.freeze(api);
-};
+}
 
 gg.create = function (tag) {
     if (typeof tag !== "string") {
