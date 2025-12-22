@@ -1,0 +1,29 @@
+{
+    "name": "test",
+    "hashkey": "test-a-secret",
+    "blockkey": "test-alot-secret",
+    "port": "9001",
+    "database": {
+        "user": "myuser",
+        "password": "mypassword",
+        "name": "mydatabase"
+    },
+    "routes": [
+        {
+            "route": "/([A-Za-z]+)?",
+            "admin": {
+                "template": "index",
+                "controllers": "admin"
+            },
+            "authorized": {
+                "privilege": "user",
+                "template": "index",
+                "controllers": "index"
+            },
+            "key": "$1",
+            "table": "$1",
+            "template": "auth",
+            "controllers": "auth"
+        }
+    ]
+}
