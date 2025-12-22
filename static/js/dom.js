@@ -261,7 +261,7 @@ function dom(selector) {
                     const register = eventRegistry.get(el);
                     if (register) {
                         for (const [eventType, handlers] of Object.entries(register)) {
-                            handlers.forEach(({ fn: f, capture: c }) => {
+                            handlers.forEach(({fn: f, capture: c}) => {
                                 el.removeEventListener(eventType, f, c);
                             });
                         }
@@ -273,8 +273,8 @@ function dom(selector) {
             if (typeof type === "string" && !fn) {
                 elements.forEach((el) => {
                     const register = eventRegistry.get(el);
-                    if (register && register[type]) {
-                        register[type].forEach(({ fn: f, capture: c }) => {
+                    if (register?.[type]) {
+                        register[type].forEach(({fn: f, capture: c}) => {
                             el.removeEventListener(type, f, c);
                         });
                         delete register[type];
@@ -289,7 +289,7 @@ function dom(selector) {
                 elements.forEach((el) => {
                     const register = eventRegistry.get(el);
                     if (register?.[type]) {
-                        register[type] = register[type].filter(({ fn: f, capture: c }) => {
+                        register[type] = register[type].filter(({fn: f, capture: c}) => {
                             if (f === fn && c === capture) {
                                 el.removeEventListener(type, f, c);
                                 return false;
@@ -327,7 +327,6 @@ function dom(selector) {
                     }
                     fn(event);
                 };
-                el.addEventListener(type, wrapper, capture);
                 let register = eventRegistry.get(el);
                 if (!register) {
                     register = {};
@@ -337,6 +336,7 @@ function dom(selector) {
                     register[type] = [];
                 }
                 register[type].push({fn: wrapper, capture});
+                el.addEventListener(type, wrapper, capture);
             });
             return api;
         }
