@@ -1,7 +1,5 @@
 "use strict";
 
-import utils from "./utils.js";
-
 const global = (
     globalThis !== undefined
     ? globalThis
@@ -29,6 +27,31 @@ const VALID_TAGS = new Set([
 
 const eventRegistry = new WeakMap();
 
+function objectType(obj) {
+    return Object.prototype.toString.call(obj).slice(8, -1).toLowerCase();
+}
+
+function isNode(value) {
+    return value
+        && typeof value === "object"
+        && typeof value.nodeName === "string"
+        && typeof value.nodeType === "number";
+}
+
+function camelCase(value) {
+    if (typeof value !== "string") {
+        return value;
+    }
+    return value.replace(/-([a-z])/g, (ignore, letter) => letter.toUpperCase());
+}
+
+function kebabCase(value) {
+    if (typeof value !== "string") {
+        return value;
+    }
+    return value.replace(/([A-Z])/g, '-$1').toLowerCase()
+}
+
 function toElements(selector) {
     const elements = [];
 
@@ -39,18 +62,18 @@ function toElements(selector) {
     } else if (typeof selector === "string") {
         elements.push(...Array.from(document.querySelectorAll(selector)));
     // Node
-    } else if (utils.isNode(selector)) {
-        if (utils.objectType(selector) === "documentfragment") {
+    } else if (isNode(selector)) {
+        if (objectType(selector) === "documentfragment") {
             // expand fragment to its element children
             elements.push(...Array.from(selector.children));
         } else {
             elements.push(selector);
         }
     // NodeList or HTMLCollection
-    } else if (utils.objectType(selector) === "nodelist" || utils.objectType(selector) === "htmlcollection") {
+    } else if (objectType(selector) === "nodelist" || objectType(selector) === "htmlcollection") {
         elements.push(...Array.from(selector));
     // Array of nodes
-    } else if (Array.isArray(selector) && selector.every(utils.isNode)) {
+    } else if (Array.isArray(selector) && selector.every(isNode)) {
         elements.push(...selector);
     }
     return elements;
@@ -242,8 +265,8 @@ function dom(selector) {
             if (typeof name !== "string") {
                 return api;
             }
-            const camelName = utils.camelCase(name);
-            const kebabName = utils.kebabCase(name);
+            const camelName = camelCase(name);
+            const kebabName = kebabCase(name);
             if (value === undefined) {
                 return elements.map(function (el) {
                     return global.getComputedStyle(el).getPropertyValue(kebabName) || "";

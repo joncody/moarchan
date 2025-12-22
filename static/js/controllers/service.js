@@ -2,7 +2,8 @@
 
 import dom from "../dom.js";
 import wsframe from "../wsframe.js";
-import utils from "../utils.js";
+
+const decoder = new TextDecoder("utf-8");
 
 wsframe.controllers.service = function service(global, view) {
     'use strict';
@@ -430,7 +431,7 @@ wsframe.controllers.service = function service(global, view) {
     // === Real-time updates ===
 
     function addThread(buffer) {
-        const rawData = utils.stringFromCodes(buffer);
+        const rawData = decoder.decode(buffer);
         let data;
         try {
             data = JSON.parse(rawData);
@@ -507,7 +508,7 @@ wsframe.controllers.service = function service(global, view) {
     }
 
     function addReply(buffer) {
-        const rawData = utils.stringFromCodes(buffer);
+        const rawData = decoder.decode(buffer);
         let data;
         try {
             data = JSON.parse(rawData);

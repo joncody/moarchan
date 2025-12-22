@@ -1,9 +1,9 @@
 "use strict";
 
-import betterview from "./betterview.js";
+import bytecursor from "./bytecursor.js";
 import emitter from "./emitter.js";
-import utils from "./utils.js";
 
+const decoder = new TextDecoder("utf-8");
 const rooms = {};
 const reserved = ["open", "close", "joined", "join", "leave", "left"];
 let socket;
@@ -22,7 +22,7 @@ function buildMessage(room, event, dst, src, payload) {
         src = "";
     }
     payloadlen = payload.byteLength || payload.length || 0;
-    data = betterview(new ArrayBuffer(room.length + event.length + dst.length + src.length + payloadlen + 20));
+    data = bytecursor(new ArrayBuffer(room.length + event.length + dst.length + src.length + payloadlen + 20));
     data.writeUint32(room.length).writeString(room);
     data.writeUint32(event.length).writeString(event);
     data.writeUint32(dst.length).writeString(dst);
@@ -107,13 +107,13 @@ function getRoom(name) {
         case "join":
             roomID = packet.src;
             members.length = 0;
-            members.push(...JSON.parse(utils.stringFromCodes(packet.payload)));
+            members.push(...JSON.parse(decoder.decode(packet.payload)));
             open = true;
             room.emit("open");
             socket.send(buildMessage(name, "joined", "", roomID, roomID));
             break;
         case "joined":
-            packet.payload = utils.stringFromCodes(packet.payload);
+            packet.payload = decoder.decode(packet.payload);
             index = members.indexOf(packet.payload);
             if (index === -1) {
                 members.push(packet.payload);
@@ -129,7 +129,7 @@ function getRoom(name) {
             delete rooms[name];
             break;
         case "left":
-            packet.payload = utils.stringFromCodes(packet.payload);
+            packet.payload = decoder.decode(packet.payload);
             index = members.indexOf(packet.payload);
             if (index !== -1) {
                 members.splice(index, 1);
@@ -182,7 +182,7 @@ const wsrooms = function (url) {
     socket.binaryType = "arraybuffer";
 
     socket.onmessage = function (e) {
-        const data = betterview(e.data);
+        const data = bytecursor(e.data);
         const packet = {
             room: data.getString(data.getUint32()),
             event: data.getString(data.getUint32()),

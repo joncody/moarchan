@@ -1,6 +1,5 @@
 "use strict";
 
-import utils from "./utils.js";
 import wsrooms from "./wsrooms.js";
 
 const global = (
@@ -13,6 +12,7 @@ const global = (
     )
 );
 
+const decoder = new TextDecoder("utf-8");
 const app = {
     base: document.querySelector("[data-base]"),
     controllers: {},
@@ -68,7 +68,7 @@ global.addEventListener("hashchange", function () {
     });
 
     app.socket.on("response", function (payload) {
-        const msg = JSON.parse(utils.stringFromCodes(payload));
+        const msg = JSON.parse(decoder.decode(payload));
 
         app.base.innerHTML = msg.template;
         app.hrefs.forEach((el) => el.removeEventListener("click", changehash));
