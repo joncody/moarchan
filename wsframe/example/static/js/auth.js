@@ -1,21 +1,21 @@
 "use strict";
 
-import gg from "./gg.js";
+import dom from "./dom.js";
 import wsframe from "./wsframe.js";
 
 wsframe.controllers.auth = function (global) {
     "use strict";
 
     function enter() {
-        const type = gg(".form-toggler").html() === "Login" ? "register" : "login";
-        const alias = gg(".form-input[name='alias']").attr("value");
-        const passhash = sjcl.codec.hex.fromBits(sjcl.hash.sha256.hash(gg(".form-input[name='password']").attr("value")));
-        const passhash_repeat = sjcl.codec.hex.fromBits(sjcl.hash.sha256.hash(gg(".form-input[name='password-repeat']").attr("value")));
+        const type = dom(".form-toggler").html() === "Login" ? "register" : "login";
+        const alias = dom(".form-input[name='alias']").attr("value");
+        const passhash = sjcl.codec.hex.fromBits(sjcl.hash.sha256.hash(dom(".form-input[name='password']").attr("value")));
+        const passhash_repeat = sjcl.codec.hex.fromBits(sjcl.hash.sha256.hash(dom(".form-input[name='password-repeat']").attr("value")));
         const xhr = new XMLHttpRequest();
         const fd = new FormData();
 
-        gg(".form-input[name='password']").attr("value", "");
-        gg(".form-input[name='password-repeat']").attr("value", "");
+        dom(".form-input[name='password']").attr("value", "");
+        dom(".form-input[name='password-repeat']").attr("value", "");
         if (type === "register" && passhash !== passhash_repeat) {
             return;
         }
@@ -31,7 +31,7 @@ wsframe.controllers.auth = function (global) {
         xhr.responseType = "text";
         xhr.send(fd);
     }
-    gg("button[name='enter']").on("click", enter, false);
+    dom("button[name='enter']").on("click", enter, false);
 
     function leave() {
         const xhr = new XMLHttpRequest();
@@ -46,18 +46,18 @@ wsframe.controllers.auth = function (global) {
         xhr.responseType = "text";
         xhr.send(null);
     }
-    gg("button[name='leave']").on("click", leave, false);
+    dom("button[name='leave']").on("click", leave, false);
 
     function toggleForm(e) {
-        const node = gg(e.currentTarget);
+        const node = dom(e.currentTarget);
         if (node.text()[0] === "Register") {
             node.html("Login");
-            gg(".form-input[name='password-repeat']").removeClass("collapsed");
+            dom(".form-input[name='password-repeat']").removeClass("collapsed");
         } else {
             node.html("Register");
-            gg(".form-input[name='password-repeat']").addClass("collapsed");
+            dom(".form-input[name='password-repeat']").addClass("collapsed");
         }
     }
-    gg(".form-toggler").on("click", toggleForm, false);
+    dom(".form-toggler").on("click", toggleForm, false);
 
 };

@@ -1,6 +1,6 @@
 "use strict";
 
-import gg from "../gg.js";
+import dom from "../dom.js";
 import wsframe from "../wsframe.js";
 import utils from "../utils.js";
 
@@ -73,52 +73,52 @@ wsframe.controllers.service = function service(global, view) {
         "x": "Paranormal"
     };
 
-    const replyBoxHeader = gg('.reply-box-header');
-    const replyBoxHeaderText = gg('.reply-box-header-text');
-    const replyBoxPost = gg('.reply-box-post');
-    const replyBox = gg('.reply-box');
+    const replyBoxHeader = dom('.reply-box-header');
+    const replyBoxHeaderText = dom('.reply-box-header-text');
+    const replyBoxPost = dom('.reply-box-post');
+    const replyBox = dom('.reply-box');
     const hashsplit = global.location.hash.split('/');
     let mouseX, mouseY;
     const room = wsframe.socket.join(hashsplit[1]);
 
     // Set board header
-    gg('.topic-header').html(`/${hashsplit[1]}/ - ${topicsMap[hashsplit[1]] || 'Unknown'}`);
+    dom('.topic-header').html(`/${hashsplit[1]}/ - ${topicsMap[hashsplit[1]] || 'Unknown'}`);
 
     // Blotter toggle
     function toggleBlotter(e) {
-        const blotter = gg('.blotter');
+        const blotter = dom('.blotter');
         if (blotter.hasClass('hide')) {
             blotter.removeClass('hide');
-            gg('.hide-blotter-container').removeClass('hide');
-            gg('.show-all-blotter-container').removeClass('hide');
-            gg('.show-blotter-container').addClass('hide');
+            dom('.hide-blotter-container').removeClass('hide');
+            dom('.show-all-blotter-container').removeClass('hide');
+            dom('.show-blotter-container').addClass('hide');
         } else {
             blotter.addClass('hide');
-            gg('.hide-blotter-container').addClass('hide');
-            gg('.show-all-blotter-container').addClass('hide');
-            gg('.show-blotter-container').removeClass('hide');
+            dom('.hide-blotter-container').addClass('hide');
+            dom('.show-all-blotter-container').addClass('hide');
+            dom('.show-blotter-container').removeClass('hide');
         }
     }
-    gg('.hide-blotter').on('click', toggleBlotter, false);
-    gg('.show-blotter').on('click', toggleBlotter, false);
+    dom('.hide-blotter').on('click', toggleBlotter, false);
+    dom('.show-blotter').on('click', toggleBlotter, false);
 
     // New post form
     function showNewPostForm(e) {
-        gg('.new-post').addClass('hide');
-        gg('.new-post-form').removeClass('hide');
+        dom('.new-post').addClass('hide');
+        dom('.new-post-form').removeClass('hide');
     }
-    gg('.new-post').on('click', showNewPostForm, false);
+    dom('.new-post').on('click', showNewPostForm, false);
 
     // Thread show/hide
     function toggleThread(e, node) {
-        gg(`#post-${node.data('post')}`).toggleClass('hide-thread');
+        dom(`#post-${node.data('post')}`).toggleClass('hide-thread');
     }
-    gg('.post-show-hide-thread').on('click', toggleThread, false);
+    dom('.post-show-hide-thread').on('click', toggleThread, false);
 
     // Replies toggle
     function toggleReplies(e, node) {
         const hash = node.data('post');
-        const thread = gg(`#post-${hash}`);
+        const thread = dom(`#post-${hash}`);
         const replies = thread.select('.reply-container');
         const data = {};
 
@@ -134,33 +134,33 @@ wsframe.controllers.service = function service(global, view) {
         }
         wsframe.assignHrefs();
     }
-    gg('.post-show-hide-replies').on('click', toggleReplies, false);
+    dom('.post-show-hide-replies').on('click', toggleReplies, false);
 
     // Hide post
     function hidePost(e, node) {
         const hash = node.data('post');
-        const post = gg(`#post-${hash}`);
+        const post = dom(`#post-${hash}`);
         if (post.hasClass('thread')) {
             post.addClass('hide-thread');
         } else if (post.hasClass('reply')) {
             post.addClass('hide-reply');
         }
-        gg('.post-options-menu').addClass('hide');
+        dom('.post-options-menu').addClass('hide');
     }
-    gg('.hide-post').on('click', hidePost, false);
+    dom('.hide-post').on('click', hidePost, false);
 
     // Unhide post
     function unhidePost(e, node) {
         const hash = node.data('post');
-        const post = gg(`#post-${hash}`);
+        const post = dom(`#post-${hash}`);
         if (post.hasClass('thread')) {
             post.removeClass('hide-thread');
         } else if (post.hasClass('reply')) {
             post.removeClass('hide-reply');
         }
-        gg('.post-options-menu').addClass('hide');
+        dom('.post-options-menu').addClass('hide');
     }
-    gg('.unhide-post').on('click', unhidePost, false);
+    dom('.unhide-post').on('click', unhidePost, false);
 
     // Post options menu
     function hidePostOptions(e, node, arg) {
@@ -171,39 +171,39 @@ wsframe.controllers.service = function service(global, view) {
 
     function showPostOptions(e, node) {
         const hash = node.data('post');
-        const menu = gg(`#post-menu-${hash}`);
-        gg('.post-options-menu').addClass('hide');
+        const menu = dom(`#post-menu-${hash}`);
+        dom('.post-options-menu').addClass('hide');
         menu.removeClass('hide');
         setTimeout(() => {
-            gg(document.body).once('click', hidePostOptions, false, menu);
+            dom(document.body).once('click', hidePostOptions, false, menu);
         }, 0);
     }
-    gg('.post-options-arrow').on('click', showPostOptions, false);
+    dom('.post-options-arrow').on('click', showPostOptions, false);
 
     // Clear forms
     function clearForms() {
-        gg('#reply-box-name').data('value', null);
-        gg('#reply-box-options').data('value', null);
-        gg('#reply-box-comment').data('value', null);
-        gg('#reply-box-file').data('value', null);
-        gg('#new-post-name').data('value', null);
+        dom('#reply-box-name').data('value', null);
+        dom('#reply-box-options').data('value', null);
+        dom('#reply-box-comment').data('value', null);
+        dom('#reply-box-file').data('value', null);
+        dom('#new-post-name').data('value', null);
         if (document.getElementById('new-post-subject')) {
-            gg('#new-post-subject').data('value', null);
+            dom('#new-post-subject').data('value', null);
         }
-        gg('#new-post-options').data('value', null);
-        gg('#new-post-comment').data('value', null);
-        gg('#new-post-file').data('value', null);
+        dom('#new-post-options').data('value', null);
+        dom('#new-post-comment').data('value', null);
+        dom('#new-post-file').data('value', null);
         // Trigger close button click safely
-        gg('.reply-box-close').each(el => el.click());
+        dom('.reply-box-close').each(el => el.click());
     }
 
     // Post new thread
     function postThread(e) {
-        const nameInput = gg('#new-post-name').get(0);
-        const subjectInput = gg('#new-post-subject').get(0);
-        const optionsInput = gg('#new-post-options').get(0);
-        const commentInput = gg('#new-post-comment').get(0);
-        const fileInput = gg('#new-post-file').get(0);
+        const nameInput = dom('#new-post-name').get(0);
+        const subjectInput = dom('#new-post-subject').get(0);
+        const optionsInput = dom('#new-post-options').get(0);
+        const commentInput = dom('#new-post-comment').get(0);
+        const fileInput = dom('#new-post-file').get(0);
 
         const schema = {
             type: 'thread',
@@ -244,10 +244,10 @@ wsframe.controllers.service = function service(global, view) {
     function postReply(e, node, arg) {
         const thread = arg;
         const replyboxVisible = !replyBox.hasClass('hide');
-        const nameInput = replyboxVisible ? gg('#reply-box-name').get(0) : gg('#new-post-name').get(0);
-        const optionsInput = replyboxVisible ? gg('#reply-box-options').get(0) : gg('#new-post-options').get(0);
-        const commentInput = replyboxVisible ? gg('#reply-box-comment').get(0) : gg('#new-post-comment').get(0);
-        const fileInput = replyboxVisible ? gg('#reply-box-file').get(0) : gg('#new-post-file').get(0);
+        const nameInput = replyboxVisible ? dom('#reply-box-name').get(0) : dom('#new-post-name').get(0);
+        const optionsInput = replyboxVisible ? dom('#reply-box-options').get(0) : dom('#new-post-options').get(0);
+        const commentInput = replyboxVisible ? dom('#reply-box-comment').get(0) : dom('#new-post-comment').get(0);
+        const fileInput = replyboxVisible ? dom('#reply-box-file').get(0) : dom('#new-post-file').get(0);
 
         const comment = commentInput?.value || '';
         if (!comment) {
@@ -297,9 +297,9 @@ wsframe.controllers.service = function service(global, view) {
 
     // Attach post button
     if (view === 'thread') {
-        gg('#new-post-button').on('click', postReply, false, hashsplit[3]);
+        dom('#new-post-button').on('click', postReply, false, hashsplit[3]);
     } else {
-        gg('#new-post-button').on('click', postThread, false);
+        dom('#new-post-button').on('click', postThread, false);
     }
 
     // Reply box drag
@@ -312,14 +312,14 @@ wsframe.controllers.service = function service(global, view) {
     }
 
     function stopDrag(e) {
-        gg(document.body).off('mousemove', dragging, false);
+        dom(document.body).off('mousemove', dragging, false);
     }
 
     function startDrag(e) {
         mouseX = e.clientX;
         mouseY = e.clientY;
-        gg(document.body).on('mousemove', dragging, false);
-        gg(document.body).once('mouseup', stopDrag, false);
+        dom(document.body).on('mousemove', dragging, false);
+        dom(document.body).once('mouseup', stopDrag, false);
     }
 
     function closeReplyBox(e, node, arg) {
@@ -334,17 +334,17 @@ wsframe.controllers.service = function service(global, view) {
 
         replyBoxHeaderText.html(thread).attr('title', thread);
         replyBoxPost.on('click', postReply, false, thread);
-        gg('.reply-box-close').on('click', closeReplyBox, false, { postFunc: postReply, thread });
-        gg('#reply-box-comment').attr('value', `>>${post}`);
+        dom('.reply-box-close').on('click', closeReplyBox, false, { postFunc: postReply, thread });
+        dom('#reply-box-comment').attr('value', `>>${post}`);
         replyBox.removeClass('hide');
     }
 
     replyBoxHeader.on('mousedown', startDrag, false);
-    gg('.post-reply-to').on('click', openReplyBox, false);
+    dom('.post-reply-to').on('click', openReplyBox, false);
 
     // Initialize thread replies visibility
     function initReplies(hash) {
-        const thread = gg(`#post-${hash}`);
+        const thread = dom(`#post-${hash}`);
         const replies = thread.select('.reply-container');
         const summaryEl = thread.select('.post-summary');
         const data = {};
@@ -363,7 +363,7 @@ wsframe.controllers.service = function service(global, view) {
     }
 
     if (view === 'topic') {
-        gg('.thread').each(node => {
+        dom('.thread').each(node => {
             initReplies(node.id.slice(5));
         });
     }
@@ -371,7 +371,7 @@ wsframe.controllers.service = function service(global, view) {
     // Scroll to tagged post
     function goToTaggedPost(e, node, arg) {
         const tagged = arg;
-        gg('.highlight').removeClass('highlight');
+        dom('.highlight').removeClass('highlight');
         const el = tagged.get(0);
         if (el) el.scrollIntoView();
         if (!tagged.hasClass('thread')) {
@@ -418,9 +418,9 @@ wsframe.controllers.service = function service(global, view) {
         }
     }
 
-    gg('.post-tag').each(node => {
+    dom('.post-tag').each(node => {
         const tag = node.data('tag');
-        const tagged = gg(`#post-${tag}`);
+        const tagged = dom(`#post-${tag}`);
         if (tagged.length() > 0 && !tagged.hasClass('thread')) {
             node.on('mouseover', hoverOverTag, false, tagged);
         }
@@ -495,8 +495,8 @@ wsframe.controllers.service = function service(global, view) {
     <div class="spacer"></div>
 </div>`;
 
-        gg('.board').insert('beforeend', htmlString);
-        const threadEl = gg(`#post-${data.hash}`);
+        dom('.board').insert('beforeend', htmlString);
+        const threadEl = dom(`#post-${data.hash}`);
         threadEl.selectAll('.post-show-hide-thread').on('click', toggleThread, false);
         threadEl.selectAll('.post-show-hide-replies').on('click', toggleReplies, false);
         threadEl.selectAll('.hide-post').on('click', hidePost, false);
@@ -522,7 +522,7 @@ wsframe.controllers.service = function service(global, view) {
             const isOp = tag === data.thread;
             const opClass = isOp ? ' op' : '';
             const tagEl = `<span class="post-tag blue-text-link${opClass}" data-tag="${data.hash}">&gt;&gt;${data.hash}</span>`;
-            const header = gg(`#post-${tag} .post-header`);
+            const header = dom(`#post-${tag} .post-header`);
             if (header.length() > 0) {
                 header.get(0).insertAdjacentHTML('beforeend', tagEl);
             }
@@ -581,21 +581,21 @@ wsframe.controllers.service = function service(global, view) {
     </div>
 </div>`;
 
-        const threadContainer = gg(`#post-${data.thread} .thread-container`);
+        const threadContainer = dom(`#post-${data.thread} .thread-container`);
         if (threadContainer.length() > 0) {
             threadContainer.get(0).insertAdjacentHTML('beforeend', html);
         }
 
-        const replyEl = gg(`#post-${data.hash}`);
+        const replyEl = dom(`#post-${data.hash}`);
         replyEl.selectAll('.hide-post').on('click', hidePost, false);
         replyEl.selectAll('.unhide-post').on('click', unhidePost, false);
         replyEl.selectAll('.post-options-arrow').on('click', showPostOptions, false);
         replyEl.selectAll('.post-reply-to').on('click', openReplyBox, false);
 
         // Rebind tags in this thread
-        gg(`#post-${data.thread} .post-tag`).each(node => {
+        dom(`#post-${data.thread} .post-tag`).each(node => {
             const tag = node.data('tag');
-            const tagged = gg(`#post-${tag}`);
+            const tagged = dom(`#post-${tag}`);
             if (tagged.length() > 0 && !tagged.hasClass('thread')) {
                 node.off('mouseover').off('click'); // prevent duplicates
                 node.on('mouseover', hoverOverTag, false, tagged);

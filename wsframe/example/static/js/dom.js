@@ -27,10 +27,14 @@ const VALID_TAGS = new Set([
   "time", "title", "tr", "track", "u", "ul", "var", "video", "wbr"
 ]);
 
+const eventRegistry = new WeakMap();
+
 function toElements(selector) {
     const elements = [];
 
-    if (typeof selector === "string") {
+    if (selector && typeof selector === "object" && typeof selector.get === "function") {
+        elements.push(...selector.get());
+    } else if (typeof selector === "string") {
         elements.push(...document.querySelectorAll(selector));
     } else if (utils.isNode(selector)) {
         elements.push(selector);
@@ -42,8 +46,8 @@ function toElements(selector) {
     return elements;
 }
 
-// GG
-function gg(selector) {
+// Factory
+function dom(selector) {
     const elements = toElements(selector);
     const api = {
         // === Core / Inspection ===
@@ -172,10 +176,10 @@ function gg(selector) {
 
         // === DOM Traversal ===
         children: function () {
-            return gg(elements.flatMap((el) => [...el.children]));
+            return dom(elements.flatMap((el) => [...el.children]));
         },
         parents: function () {
-            return gg(elements.map((el) => el.parentElement));
+            return dom(elements.map((el) => el.parentElement));
         },
         select: function (token) {
             if (typeof token !== "string") {
@@ -185,7 +189,7 @@ function gg(selector) {
             elements.forEach(function (el) {
                 nodes.push(el.querySelector(token));
             });
-            return gg(nodes);
+            return dom(nodes);
         },
         selectAll: function (token) {
             if (typeof token !== "string") {
@@ -195,13 +199,13 @@ function gg(selector) {
             elements.forEach(function (el) {
                 nodes.push(...el.querySelectorAll(token));
             });
-            return gg(nodes);
+            return dom(nodes);
         },
 
         // === DOM Manipulation ===
         clone: function (deep = true) {
             const clones = elements.map((el) => el.cloneNode(deep));
-            return gg(clones);
+            return dom(clones);
         },
         remove: function () {
             elements.forEach((el) => {
@@ -237,14 +241,71 @@ function gg(selector) {
             if (typeof type !== "string" || typeof fn !== "function") {
                 return api;
             }
-            elements.forEach((el) => el.addEventListener(type, fn, capture));
+            elements.forEach((el) => {
+                let register = eventRegistry.get(el);
+                if (!register) {
+                    register = {};
+                    eventRegistry.set(el, register);
+                }
+                if (!register[type]) {
+                    register[type] = [];
+                }
+                register[type].push({fn, capture});
+                el.addEventListener(type, fn, capture);
+            });
             return api;
         },
         off: function (type, fn, capture = false) {
-            if (typeof type !== "string" || typeof fn !== "function") {
+            if (!type) {
+                elements.forEach((el) => {
+                    const register = eventRegistry.get(el);
+                    if (register) {
+                        for (const [eventType, handlers] of Object.entries(register)) {
+                            handlers.forEach(({ fn: f, capture: c }) => {
+                                el.removeEventListener(eventType, f, c);
+                            });
+                        }
+                        eventRegistry.delete(el);
+                    }
+                });
                 return api;
             }
-            elements.forEach((el) => el.removeEventListener(type, fn, capture));
+            if (typeof type === "string" && !fn) {
+                elements.forEach((el) => {
+                    const register = eventRegistry.get(el);
+                    if (register && register[type]) {
+                        register[type].forEach(({ fn: f, capture: c }) => {
+                            el.removeEventListener(type, f, c);
+                        });
+                        delete register[type];
+                        if (Object.keys(register).length === 0) {
+                            eventRegistry.delete(el);
+                        }
+                    }
+                });
+                return api;
+            }
+            if (typeof type === "string" && typeof fn === "function") {
+                elements.forEach((el) => {
+                    const register = eventRegistry.get(el);
+                    if (register?.[type]) {
+                        register[type] = register[type].filter(({ fn: f, capture: c }) => {
+                            if (f === fn && c === capture) {
+                                el.removeEventListener(type, f, c);
+                                return false;
+                            }
+                            return true;
+                        });
+                        if (register[type].length === 0) {
+                            delete register[type];
+                            if (Object.keys(register).length === 0) {
+                                eventRegistry.delete(el);
+                            }
+                        }
+                    }
+                });
+                return api;
+            }
             return api;
         },
         once: function (type, fn, capture = false) {
@@ -252,11 +313,30 @@ function gg(selector) {
                 return api;
             }
             elements.forEach((el) => {
-                const onceFn = function (event) {
-                    el.removeEventListener(type, onceFn, capture);
-                    fn(event, el);
+                const wrapper = (event) => {
+                    el.removeEventListener(type, wrapper, capture);
+                    const register = eventRegistry.get(el);
+                    if (register?.[type]) {
+                        register[type] = register[type].filter((h) => h.fn !== wrapper);
+                        if (register[type].length === 0) {
+                            delete register[type];
+                            if (Object.keys(register).length === 0) {
+                                eventRegistry.delete(el);
+                            }
+                        }
+                    }
+                    fn(event);
                 };
-                el.addEventListener(type, onceFn, capture);
+                el.addEventListener(type, wrapper, capture);
+                let register = eventRegistry.get(el);
+                if (!register) {
+                    register = {};
+                    eventRegistry.set(el, register);
+                }
+                if (!register[type]) {
+                    register[type] = [];
+                }
+                register[type].push({fn: wrapper, capture});
             });
             return api;
         }
@@ -264,15 +344,15 @@ function gg(selector) {
     return Object.freeze(api);
 }
 
-gg.create = function (tag) {
+dom.create = function (tag) {
     if (typeof tag !== "string") {
-        return null;
+        return dom();
     }
     tag = tag.toLowerCase();
     if (!VALID_TAGS.has(tag)) {
-        return null;
+        return dom();
     }
-    return gg(document.createElement(tag));
+    return dom(document.createElement(tag));
 };
 
-export default Object.freeze(gg);
+export default Object.freeze(dom);
