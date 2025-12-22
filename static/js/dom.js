@@ -32,14 +32,24 @@ const eventRegistry = new WeakMap();
 function toElements(selector) {
     const elements = [];
 
+    // dom(...) object
     if (selector && typeof selector === "object" && typeof selector.get === "function") {
         elements.push(...selector.get());
+    // CSS selector
     } else if (typeof selector === "string") {
-        elements.push(...document.querySelectorAll(selector));
+        elements.push(...Array.from(document.querySelectorAll(selector)));
+    // Node
     } else if (utils.isNode(selector)) {
-        elements.push(selector);
-    } else if (utils.objectType(selector) === "nodelist") {
-        elements.push(...selector);
+        if (utils.objectType(selector) === "documentfragment") {
+            // expand fragment to its element children
+            elements.push(...Array.from(selector.children));
+        } else {
+            elements.push(selector);
+        }
+    // NodeList or HTMLCollection
+    } else if (utils.objectType(selector) === "nodelist" || utils.objectType(selector) === "htmlcollection") {
+        elements.push(...Array.from(selector));
+    // Array of nodes
     } else if (Array.isArray(selector) && selector.every(utils.isNode)) {
         elements.push(...selector);
     }
@@ -67,8 +77,7 @@ function dom(selector) {
 
         // === Collection Management ===
         addItem: function (val) {
-            const newElements = toElements(val);
-            elements.push(...newElements);
+            elements.push(...toElements(val));
             return api;
         },
         removeItem: function (index) {
