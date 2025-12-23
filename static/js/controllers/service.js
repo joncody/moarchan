@@ -1,11 +1,11 @@
 "use strict";
 
 import dom from "../dom.js";
-import wsframe from "../wsframe.js";
+import frame from "../frame.js";
 
 const decoder = new TextDecoder("utf-8");
 
-wsframe.controllers.service = function service(global, view) {
+frame.controllers.service = function service(global, view) {
     'use strict';
 
     const topicsMap = {
@@ -80,7 +80,7 @@ wsframe.controllers.service = function service(global, view) {
     const replyBox = dom('.reply-box');
     const hashsplit = global.location.hash.split('/');
     let mouseX, mouseY;
-    const room = wsframe.socket.join(hashsplit[1]);
+    const room = frame.socket.join(hashsplit[1]);
 
     // Set board header
     dom('.topic-header').html(`/${hashsplit[1]}/ - ${topicsMap[hashsplit[1]] || 'Unknown'}`);
@@ -133,7 +133,7 @@ wsframe.controllers.service = function service(global, view) {
         } else {
             summaryEl.html('Showing all replies.');
         }
-        wsframe.assignHrefs();
+        frame.assignHrefs();
     }
     dom('.post-show-hide-replies').on('click', toggleReplies, false);
 
@@ -360,7 +360,7 @@ wsframe.controllers.service = function service(global, view) {
                 thread.addClass('show-replies');
             }
         }
-        wsframe.assignHrefs();
+        frame.assignHrefs();
     }
 
     if (view === 'topic') {
@@ -504,7 +504,7 @@ wsframe.controllers.service = function service(global, view) {
         threadEl.selectAll('.unhide-post').on('click', unhidePost, false);
         threadEl.selectAll('.post-options-arrow').on('click', showPostOptions, false);
         threadEl.selectAll('.post-reply-to').on('click', openReplyBox, false);
-        wsframe.assignHrefs();
+        frame.assignHrefs();
     }
 
     function addReply(buffer) {

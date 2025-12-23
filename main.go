@@ -14,12 +14,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"moarchan/wsframe"
+	"moarchan/frame"
 	"github.com/joncody/wsrooms"
 	"github.com/vincent-petithory/dataurl"
 )
 
-var app *wsframe.App
+var app *frame.App
 
 type Thread struct {
 	Type     string           `json:"type"`
@@ -183,7 +183,7 @@ func replyHandler(conn *wsrooms.Conn, msg *wsrooms.Message) {
 }
 
 func main() {
-	app = wsframe.NewApp("./config.json")
+	app = frame.NewApp("./config.json")
 	wsrooms.Emitter.On("new-thread", threadHandler)
 	wsrooms.Emitter.On("new-reply", replyHandler)
 	app.Start()

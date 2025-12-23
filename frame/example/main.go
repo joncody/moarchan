@@ -3,11 +3,11 @@ package main
 import (
 	"log"
 
-	"moarchan/wsframe"
+	"moarchan/frame"
 	"github.com/joncody/wsrooms"
 )
 
-var app *wsframe.App
+var app *frame.App
 
 func testHandler(c *wsrooms.Conn, msg *wsrooms.Message, matches []string) {
 	log.Println(matches)
@@ -15,7 +15,7 @@ func testHandler(c *wsrooms.Conn, msg *wsrooms.Message, matches []string) {
 }
 
 func main() {
-	app = wsframe.NewApp("./config.json")
+	app = frame.NewApp("./config.json")
 	app.AddRoute("^/test/(.*)$", testHandler)
 	app.Start()
 }

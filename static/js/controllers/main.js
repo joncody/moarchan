@@ -1,8 +1,8 @@
 "use strict";
 
-import wsframe from "../wsframe.js";
+import frame from "../frame.js";
 
-wsframe.controllers.main = function main(global, view) {
+frame.controllers.main = function main(global, view) {
     "use strict";
 
 };

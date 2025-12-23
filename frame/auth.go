@@ -1,4 +1,4 @@
-package wsframe
+package frame
 
 import (
 	"crypto/rand"

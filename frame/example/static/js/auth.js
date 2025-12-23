@@ -1,9 +1,9 @@
 "use strict";
 
 import dom from "./dom.js";
-import wsframe from "./wsframe.js";
+import frame from "./frame.js";
 
-wsframe.controllers.auth = function (global) {
+frame.controllers.auth = function (global) {
     "use strict";
 
     function enter() {

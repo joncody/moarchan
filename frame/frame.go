@@ -1,4 +1,4 @@
-package wsframe
+package frame
 
 import (
 	"database/sql"
@@ -48,7 +48,7 @@ func (wfa *App) Start() {
 
 func NewApp(cj string) *App {
 	app := &App{
-		Name:      "wsframe",
+		Name:      "frame",
 		Templates: template.Must(template.New("").Funcs(TemplateFuncs).ParseGlob("./static/views/*")),
 		HashKey:   "very-secret",
 		BlockKey:  "a-lotvery-secret",
