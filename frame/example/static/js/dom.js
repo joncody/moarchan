@@ -94,6 +94,9 @@ function dom(selector) {
             return elements.length;
         },
         each: function (fn) {
+            if (typeof fn !== "function") {
+                return api;
+            }
             elements.forEach(fn, api);
             return api;
         },
