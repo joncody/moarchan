@@ -110,7 +110,6 @@ HEADER
 .moarchan-header {
     display: block;
     text-align: center;
-    height: 100px;
     padding: 10px 0;
 }
 .moarchan-clover {
@@ -230,6 +229,7 @@ MAIN
     box-sizing: border-box;
     width: 19%;
     padding: 9px;
+    vertical-align: top;
 }
 .topics-list-header {
     color: #800;

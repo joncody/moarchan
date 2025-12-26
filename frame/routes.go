@@ -1,7 +1,9 @@
+// routes.go
 package frame
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha1"
 	"encoding/json"
 	"fmt"
@@ -11,6 +13,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/joncody/wsrooms"
 )
@@ -20,7 +23,7 @@ type RouteConfig struct {
 	Key         string `json:"key"`
 	Template    string `json:"template"`
 	Controllers string `json:"controllers"`
-	Privilege   string `json:"privilege,omitempty"` // Only used for Authorized routes
+	Privilege   string `json:"privilege,omitempty"`
 }
 
 type Route struct {
@@ -31,8 +34,13 @@ type Route struct {
 }
 
 type AddedRoute struct {
-	Route   string
+	Pattern *regexp.Regexp
 	Handler func(c *wsrooms.Conn, msg *wsrooms.Message, matches []string)
+}
+
+type CompiledRoute struct {
+	Pattern *regexp.Regexp
+	Config  Route
 }
 
 type RoutePayload struct {
@@ -40,10 +48,14 @@ type RoutePayload struct {
 	Controllers []string `json:"controllers"`
 }
 
+var (
+	keyCleanRegex = regexp.MustCompile(`[^a-z0-9_\-\s]+`)
+	reservedPath  = regexp.MustCompile(`^/(ws|login|register|logout|static/|favicon\.ico)`)
+)
+
 func ToKey(s string) string {
-	respecial := regexp.MustCompile(`([^a-z0-9_\-\s]+)`)
 	s = strings.ToLower(s)
-	s = respecial.ReplaceAllString(s, "")
+	s = keyCleanRegex.ReplaceAllString(s, "")
 	s = strings.Replace(s, " - ", "_-_", -1)
 	s = strings.Replace(s, " ", "-", -1)
 	return strings.Trim(s, "-")
@@ -52,74 +64,108 @@ func ToKey(s string) string {
 func FromKey(s string) string {
 	s = strings.Replace(s, "-", " ", -1)
 	s = strings.Replace(s, "_ _", " - ", -1)
-	s = strings.Title(s)
-	return strings.Trim(s, " ")
+	return strings.Title(s)
 }
 
 var TemplateFuncs = template.FuncMap{
-	"unescaped": func(x string) interface{} {
-		return template.HTML(x)
-	},
-	"sha1sum": func(x string) string {
-		return fmt.Sprintf("%x", sha1.Sum([]byte(x)))
-	},
-	"subtract": func(a, b int) int {
-		return a - b
-	},
-	"add": func(a, b int) int {
-		return a + b
-	},
-	"multiply": func(a, b int) int {
-		return a * b
-	},
-	"divide": func(a, b int) int {
-		return a / b
-	},
-	"usd": func(x int) string {
-		return fmt.Sprintf("$%.2f", float64(x)/float64(100))
-	},
-	"css": func(s string) template.CSS {
-		return template.CSS(s)
-	},
-	"tokey":   ToKey,
-	"fromkey": FromKey,
+	"unescaped": func(x string) interface{} { return template.HTML(x) },
+	"sha1sum":   func(x string) string { return fmt.Sprintf("%x", sha1.Sum([]byte(x))) },
+	"subtract":  func(a, b int) int { return a - b },
+	"add":       func(a, b int) int { return a + b },
+	"multiply":  func(a, b int) int { return a * b },
+	"divide":    func(a, b int) int { return a / b },
+	"usd":       func(x int) string { return fmt.Sprintf("$%.2f", float64(x)/100) },
+	"css":       func(s string) template.CSS { return template.CSS(s) },
+	"tokey":     ToKey,
+	"fromkey":   FromKey,
 }
 
-func (app *App) setupRoutes() {
+func (app *App) setupRoutes() error {
 	app.Router.HandleFunc("/login", app.login).Methods("POST")
 	app.Router.HandleFunc("/register", app.register).Methods("POST")
 	app.Router.HandleFunc("/logout", app.logout).Methods("POST")
 	app.Router.HandleFunc("/ws", wsrooms.SocketHandler(app.ReadCookie)).Methods("GET")
 	app.Router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("./static/"))))
-	app.Router.PathPrefix("/").Handler(http.HandlerFunc(app.baseHandler)).Methods("GET")
+	app.Router.PathPrefix("/").HandlerFunc(app.baseHandler).Methods("GET")
+
+	if err := app.compileRoutes(); err != nil {
+		return fmt.Errorf("compile routes: %w", err)
+	}
+	return nil
 }
 
-func (wfa *App) AddRoute(path string, handler func(c *wsrooms.Conn, msg *wsrooms.Message, matches []string)) {
-	wfa.Added = append(wfa.Added, AddedRoute{Route: path, Handler: handler})
+func (app *App) compileRoutes() error {
+	compiled := make([]CompiledRoute, 0, len(app.Routes))
+	for _, r := range app.Routes {
+		patternStr := r.Route
+		if !strings.HasPrefix(patternStr, "^") {
+			patternStr = "^" + patternStr
+		}
+		if !strings.HasSuffix(patternStr, "$") {
+			patternStr += "$"
+		}
+		re, err := regexp.Compile(patternStr)
+		if err != nil {
+			return fmt.Errorf("invalid route pattern %q: %w", r.Route, err)
+		}
+		compiled = append(compiled, CompiledRoute{
+			Pattern: re,
+			Config:  r,
+		})
+	}
+	app.CompiledRoutes = compiled
+	return nil
 }
 
-func (wfa *App) baseHandler(w http.ResponseWriter, r *http.Request) {
-	cook := wfa.ReadCookie(r)
-	if err := wfa.Templates.ExecuteTemplate(w, "base", cook); err != nil {
-		log.Println("Base handler template error:", err)
-	}
-}
-
-func (wfa *App) Render(c *wsrooms.Conn, msg *wsrooms.Message, template string, controllers []string, data interface{}) {
-	var tpl bytes.Buffer
-
-	if err := wfa.Templates.ExecuteTemplate(&tpl, template, data); err != nil {
-        log.Println("Template error:", err)
-	}
-	resp := RoutePayload{
-		Template:    tpl.String(),
-		Controllers: controllers,
-	}
-	payload, err := json.Marshal(&resp)
+func (app *App) AddRoute(pattern string, handler func(c *wsrooms.Conn, msg *wsrooms.Message, matches []string)) error {
+	re, err := regexp.Compile(pattern)
 	if err != nil {
-        log.Println("Marshal error:", err)
+		return fmt.Errorf("invalid route pattern %q: %w", pattern, err)
+	}
+	app.Added = append(app.Added, AddedRoute{
+		Pattern: re,
+		Handler: handler,
+	})
+	return nil
+}
+
+func (app *App) baseHandler(w http.ResponseWriter, r *http.Request) {
+	if reservedPath.MatchString(r.URL.Path) {
+		http.NotFound(w, r)
 		return
 	}
+	cook := app.ReadCookie(r)
+	if err := app.Templates.ExecuteTemplate(w, "base", cook); err != nil {
+		log.Printf("Template error in baseHandler: %v", err)
+		http.Error(w, "Render failed", http.StatusInternalServerError)
+	}
+}
+
+func (app *App) Render(c *wsrooms.Conn, msg *wsrooms.Message, tmpl string, controllers []string, data interface{}) {
+	var buf bytes.Buffer
+	if err := app.Templates.ExecuteTemplate(&buf, tmpl, data); err != nil {
+		log.Printf("Render error (%s): %v", tmpl, err)
+		return
+	}
+
+	cleanCtrls := make([]string, 0, len(controllers))
+	for _, ctrl := range controllers {
+		if trimmed := strings.TrimSpace(ctrl); trimmed != "" {
+			cleanCtrls = append(cleanCtrls, trimmed)
+		}
+	}
+
+	resp := RoutePayload{
+		Template:    buf.String(),
+		Controllers: cleanCtrls,
+	}
+
+	payload, err := json.Marshal(resp)
+	if err != nil {
+		log.Printf("JSON marshal error: %v", err)
+		return
+	}
+
 	msg.Event = "response"
 	msg.EventLength = len(msg.Event)
 	msg.Payload = payload
@@ -131,52 +177,69 @@ func resolveDynamic(field string, subs []string) string {
 	if !strings.HasPrefix(field, "$") {
 		return field
 	}
-	if n, err := strconv.Atoi(field[1:]); err == nil && n < len(subs) {
+	if n, err := strconv.Atoi(field[1:]); err == nil && n >= 0 && n < len(subs) {
 		return subs[n]
 	}
 	return ""
 }
 
-func (wfa *App) processRequest(c *wsrooms.Conn, msg *wsrooms.Message) {
-	var data interface{}
+func (app *App) processRequest(c *wsrooms.Conn, msg *wsrooms.Message) {
 	path := string(msg.Payload)
-	for _, added := range wfa.Added {
-		if pattern := regexp.MustCompile(added.Route); pattern.MatchString(path) {
-			subs := pattern.FindStringSubmatch(path)
+
+	for _, added := range app.Added {
+		if subs := added.Pattern.FindStringSubmatch(path); subs != nil {
 			added.Handler(c, msg, subs)
 			return
 		}
 	}
-	for _, route := range wfa.Routes {
-		pattern := regexp.MustCompile(route.Route)
-		subs := pattern.FindStringSubmatch(path)
-		if subs == nil {
-			continue
-		}
 
-		cfg := route.RouteConfig
-		priv := c.Cookie["privilege"]
+	for _, cr := range app.CompiledRoutes {
+		if subs := cr.Pattern.FindStringSubmatch(path); subs != nil {
+			route := cr.Config
+			cfg := route.RouteConfig
+			priv, _ := c.Cookie["privilege"]
 
-		switch {
-		case priv == "admin" && (route.Admin.Template != "" || route.Admin.Controllers != ""):
-			cfg = route.Admin
-		case priv != "" && route.Authorized.Privilege != "" && strings.Contains(route.Authorized.Privilege, priv):
-			cfg = route.Authorized
-		}
-
-		table := resolveDynamic(cfg.Table, subs)
-		key := resolveDynamic(cfg.Key, subs)
-
-		if table != "" {
-			if key != "" {
-				data = wfa.GetRow(table, key)
-			} else {
-				data = wfa.GetRows(table)
+			if priv == "admin" && (route.Admin.Template != "" || route.Admin.Controllers != "") {
+				cfg = route.Admin
+			} else if priv != "" && route.Authorized.Privilege != "" {
+				for _, allowed := range strings.Split(route.Authorized.Privilege, ",") {
+					if strings.TrimSpace(allowed) == priv {
+						cfg = route.Authorized
+						break
+					}
+				}
 			}
-		}
 
-		controllers := strings.Split(cfg.Controllers, ",")
-		wfa.Render(c, msg, cfg.Template, controllers, data)
-		return
+			table := resolveDynamic(cfg.Table, subs)
+			key := resolveDynamic(cfg.Key, subs)
+
+			if table != "" && !IsValidTableName(table) {
+				log.Printf("Blocked invalid table %q in route", table)
+				return
+			}
+
+			var data interface{}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			var errDB error
+			if table != "" {
+				if key != "" {
+					data, errDB = app.GetRow(ctx, table, key)
+				} else {
+					data, errDB = app.GetRows(ctx, table)
+				}
+				if errDB != nil {
+					log.Printf("DB error for %s: %v", path, errDB)
+					//	return
+				}
+			}
+
+			controllers := strings.Split(cfg.Controllers, ",")
+			app.Render(c, msg, cfg.Template, controllers, data)
+			return
+		}
 	}
+
+	log.Printf("No route matched: %s", path)
 }

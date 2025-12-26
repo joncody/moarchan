@@ -1,6 +1,8 @@
+// main.go
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -8,15 +10,14 @@ import (
 	"image/gif"
 	"image/jpeg"
 	"image/png"
-	"io/ioutil"
 	"log"
 	"os"
 	"time"
 
 	"github.com/google/uuid"
-	"moarchan/frame"
 	"github.com/joncody/wsrooms"
 	"github.com/vincent-petithory/dataurl"
+	"moarchan/frame"
 )
 
 var app *frame.App
@@ -74,12 +75,14 @@ func (f *FileInfo) Process() {
 		log.Println(err)
 		return
 	}
-	ioutil.WriteFile(f.Path, fdata.Data, 0775)
+	os.MkdirAll("./static/images/uploads", 0755)
+	os.WriteFile(f.Path, fdata.Data, 0775)
 	saved, err := os.Open(f.Path)
 	if err != nil {
 		log.Println(err)
 		return
 	}
+	defer saved.Close()
 	if f.Mime == "image/jpeg" {
 		config, err = jpeg.DecodeConfig(saved)
 	} else if f.Mime == "image/png" {
@@ -118,12 +121,17 @@ func threadHandler(conn *wsrooms.Conn, msg *wsrooms.Message) {
 	}
 	thread.Unique.Generate()
 	thread.FileInfo.Process()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	payload, err := json.Marshal(&thread)
 	if err != nil {
 		log.Println(err)
 		return
 	}
-	if err := app.InsertRow(thread.Topic, thread.Unique.Hash, string(payload)); err != nil {
+	if err := app.InsertRow(ctx, thread.Topic, thread.Unique.Hash, string(payload)); err != nil {
+		log.Println(err)
 		return
 	}
 	response := wsrooms.ConstructMessage(thread.Topic, "new-thread", "", conn.ID, payload)
@@ -131,9 +139,6 @@ func threadHandler(conn *wsrooms.Conn, msg *wsrooms.Message) {
 }
 
 func replyHandler(conn *wsrooms.Conn, msg *wsrooms.Message) {
-	var thread Thread
-	var obj map[string]interface{}
-	var dataobj []byte
 	var reply Reply
 	err := json.Unmarshal(msg.Payload, &reply)
 	if err != nil {
@@ -142,11 +147,20 @@ func replyHandler(conn *wsrooms.Conn, msg *wsrooms.Message) {
 	}
 	reply.Unique.Generate()
 	reply.FileInfo.Process()
-	if obj = app.GetRow(reply.Topic, reply.Thread); err != nil {
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Get parent thread
+	obj, err := app.GetRow(ctx, reply.Topic, reply.Thread)
+	if err != nil {
 		log.Println(err)
 		return
 	}
-	dataobj, err = json.Marshal(obj)
+
+	// Convert to Thread
+	var thread Thread
+	dataobj, err := json.Marshal(obj)
 	if err != nil {
 		log.Println(err)
 		return
@@ -156,23 +170,39 @@ func replyHandler(conn *wsrooms.Conn, msg *wsrooms.Message) {
 		log.Println(err)
 		return
 	}
+
+	// Initialize Replies if nil
+	if thread.Replies == nil {
+		thread.Replies = make(map[string]Reply)
+	}
+
+	// Insert new reply
 	thread.Replies[reply.Unique.Hash] = reply
+
+	// Original tagging logic — fully preserved
 	for _, tag := range reply.Tagging {
 		if tag == reply.Thread {
+			// Tag the main thread
 			thread.TaggedBy = append(thread.TaggedBy, reply.Unique.Hash)
-		} else if taggedreply, ok := thread.Replies[tag]; ok {
-			taggedreply.TaggedBy = append(taggedreply.TaggedBy, reply.Unique.Hash)
+		} else if taggedReply, exists := thread.Replies[tag]; exists {
+			// Tag a specific reply — update it in place
+			taggedReply.TaggedBy = append(taggedReply.TaggedBy, reply.Unique.Hash)
+			thread.Replies[tag] = taggedReply // persist the update
 		}
 	}
+
+	// Save updated thread back
 	thr, err := json.Marshal(&thread)
 	if err != nil {
 		log.Println(err)
 		return
 	}
-	if err := app.InsertRow(reply.Topic, reply.Thread, string(thr)); err != nil {
+	if err := app.InsertRow(ctx, reply.Topic, reply.Thread, string(thr)); err != nil {
 		log.Println(err)
 		return
 	}
+
+	// Send reply response
 	payload, err := json.Marshal(&reply)
 	if err != nil {
 		log.Println(err)
@@ -183,7 +213,11 @@ func replyHandler(conn *wsrooms.Conn, msg *wsrooms.Message) {
 }
 
 func main() {
-	app = frame.NewApp("./config.json")
+	var err error
+	app, err = frame.NewApp("./config.json")
+	if err != nil {
+		log.Fatal(err)
+	}
 	wsrooms.Emitter.On("new-thread", threadHandler)
 	wsrooms.Emitter.On("new-reply", replyHandler)
 	app.Start()
