@@ -50,7 +50,6 @@ global.addEventListener("hashchange", function () {
             global.location.hash = "/";
             app.hash = "/";
         }
-        console.log(app.hash);
         app.socket.send("request", app.hash);
     });
 
