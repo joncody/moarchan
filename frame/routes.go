@@ -79,20 +79,6 @@ var TemplateFuncs = template.FuncMap{
 	"fromkey":   FromKey,
 }
 
-func (app *App) setupRoutes() error {
-	app.Router.HandleFunc("/login", app.login).Methods("POST")
-	app.Router.HandleFunc("/register", app.register).Methods("POST")
-	app.Router.HandleFunc("/logout", app.logout).Methods("POST")
-	app.Router.HandleFunc("/ws", wsrooms.SocketHandler(app.ReadCookie)).Methods("GET")
-	app.Router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("./static/"))))
-	app.Router.PathPrefix("/").HandlerFunc(app.baseHandler).Methods("GET")
-
-	if err := app.compileRoutes(); err != nil {
-		return fmt.Errorf("compile routes: %w", err)
-	}
-	return nil
-}
-
 func (app *App) compileRoutes() error {
 	compiled := make([]CompiledRoute, 0, len(app.Routes))
 	for _, r := range app.Routes {
@@ -113,6 +99,19 @@ func (app *App) compileRoutes() error {
 		})
 	}
 	app.CompiledRoutes = compiled
+	return nil
+}
+
+func (app *App) setupRoutes() error {
+	app.Router.HandleFunc("/login", app.login).Methods("POST")
+	app.Router.HandleFunc("/register", app.register).Methods("POST")
+	app.Router.HandleFunc("/logout", app.logout).Methods("POST")
+	app.Router.HandleFunc("/ws", wsrooms.SocketHandler(app.ReadCookie)).Methods("GET")
+	app.Router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("./static/"))))
+	app.Router.PathPrefix("/").HandlerFunc(app.baseHandler).Methods("GET")
+	if err := app.compileRoutes(); err != nil {
+		return fmt.Errorf("compile routes: %w", err)
+	}
 	return nil
 }
 
@@ -146,25 +145,21 @@ func (app *App) Render(c *wsrooms.Conn, msg *wsrooms.Message, tmpl string, contr
 		log.Printf("Render error (%s): %v", tmpl, err)
 		return
 	}
-
 	cleanCtrls := make([]string, 0, len(controllers))
 	for _, ctrl := range controllers {
 		if trimmed := strings.TrimSpace(ctrl); trimmed != "" {
 			cleanCtrls = append(cleanCtrls, trimmed)
 		}
 	}
-
 	resp := RoutePayload{
 		Template:    buf.String(),
 		Controllers: cleanCtrls,
 	}
-
 	payload, err := json.Marshal(resp)
 	if err != nil {
 		log.Printf("JSON marshal error: %v", err)
 		return
 	}
-
 	msg.Event = "response"
 	msg.EventLength = len(msg.Event)
 	msg.Payload = payload
@@ -184,20 +179,17 @@ func resolveDynamic(field string, subs []string) string {
 
 func (app *App) processRequest(c *wsrooms.Conn, msg *wsrooms.Message) {
 	path := string(msg.Payload)
-
 	for _, added := range app.Added {
 		if subs := added.Pattern.FindStringSubmatch(path); subs != nil {
 			added.Handler(c, msg, subs)
 			return
 		}
 	}
-
 	for _, cr := range app.CompiledRoutes {
 		if subs := cr.Pattern.FindStringSubmatch(path); subs != nil {
 			route := cr.Config
 			cfg := route.RouteConfig
 			priv, _ := c.Cookie["privilege"]
-
 			if priv == "admin" && (route.Admin.Template != "" || route.Admin.Controllers != "") {
 				cfg = route.Admin
 			} else if priv != "" && route.Authorized.Privilege != "" {
@@ -208,19 +200,15 @@ func (app *App) processRequest(c *wsrooms.Conn, msg *wsrooms.Message) {
 					}
 				}
 			}
-
 			table := resolveDynamic(cfg.Table, subs)
 			key := resolveDynamic(cfg.Key, subs)
-
 			if table != "" && !IsValidTableName(table) {
 				log.Printf("Blocked invalid table %q in route", table)
 				return
 			}
-
 			var data interface{}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-
 			var errDB error
 			if table != "" {
 				if key != "" {
@@ -233,12 +221,10 @@ func (app *App) processRequest(c *wsrooms.Conn, msg *wsrooms.Message) {
 					//	return
 				}
 			}
-
 			controllers := strings.Split(cfg.Controllers, ",")
 			app.Render(c, msg, cfg.Template, controllers, data)
 			return
 		}
 	}
-
 	log.Printf("No route matched: %s", path)
 }

@@ -12,19 +12,15 @@ frame.controllers.auth = function (global) {
         e.preventDefault();
         const alias = dom(".form-input[name='alias']").get(0).value.trim();
         const password = dom(".form-input[name='password']").get(0).value;
-
         // Clear sensitive fields immediately
         dom(".form-input[name='password']").get(0).value = "";
-
         if (!alias || !password) {
             // Optional: show validation message
             return;
         }
-
         const fd = new FormData();
         fd.append("alias", alias);
         fd.append("password", password);
-
         fetch("/login", {
             method: "POST",
             body: fd,
@@ -48,16 +44,13 @@ frame.controllers.auth = function (global) {
         const alias = dom(".form-input[name='alias']").get(0).value.trim();
         const password = dom(".form-input[name='password']").get(0).value;
         const passwordRepeat = dom(".form-input[name='password-repeat']").get(0).value;
-
         // Clear password fields immediately
         dom(".form-input[name='password']").get(0).value = "";
         dom(".form-input[name='password-repeat']").get(0).value = "";
-
         if (!alias || !password || password !== passwordRepeat) {
             // Optional: show "Passwords don't match" etc.
             return;
         }
-
         const fd = new FormData();
         fd.append("alias", alias);
         fd.append("password", password);
