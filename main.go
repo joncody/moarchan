@@ -147,17 +147,14 @@ func replyHandler(conn *wsrooms.Conn, msg *wsrooms.Message) {
 	}
 	reply.Unique.Generate()
 	reply.FileInfo.Process()
-
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-
 	// Get parent thread
 	obj, err := app.GetRow(ctx, reply.Topic, reply.Thread)
 	if err != nil {
 		log.Println(err)
 		return
 	}
-
 	// Convert to Thread
 	var thread Thread
 	dataobj, err := json.Marshal(obj)
@@ -170,15 +167,12 @@ func replyHandler(conn *wsrooms.Conn, msg *wsrooms.Message) {
 		log.Println(err)
 		return
 	}
-
 	// Initialize Replies if nil
 	if thread.Replies == nil {
 		thread.Replies = make(map[string]Reply)
 	}
-
 	// Insert new reply
 	thread.Replies[reply.Unique.Hash] = reply
-
 	// Original tagging logic — fully preserved
 	for _, tag := range reply.Tagging {
 		if tag == reply.Thread {
@@ -190,7 +184,6 @@ func replyHandler(conn *wsrooms.Conn, msg *wsrooms.Message) {
 			thread.Replies[tag] = taggedReply // persist the update
 		}
 	}
-
 	// Save updated thread back
 	thr, err := json.Marshal(&thread)
 	if err != nil {
@@ -201,7 +194,6 @@ func replyHandler(conn *wsrooms.Conn, msg *wsrooms.Message) {
 		log.Println(err)
 		return
 	}
-
 	// Send reply response
 	payload, err := json.Marshal(&reply)
 	if err != nil {
