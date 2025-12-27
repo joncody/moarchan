@@ -1,4 +1,3 @@
-// auth.go
 package frame
 
 import (
@@ -21,6 +20,10 @@ type Auth struct {
 	Salt      string `json:"salt"`
 	Hash      string `json:"hash"`
 	Privilege string `json:"privilege"`
+}
+
+func isErrNoRows(err error) bool {
+	return err == sql.ErrNoRows
 }
 
 func (app *App) ReadCookie(r *http.Request) map[string]string {
@@ -186,8 +189,4 @@ func (app *App) login(w http.ResponseWriter, r *http.Request) {
 func (app *App) logout(w http.ResponseWriter, r *http.Request) {
 	app.SetCookie(w, r, nil, true)
 	w.WriteHeader(http.StatusOK)
-}
-
-func isErrNoRows(err error) bool {
-	return err != nil && err == sql.ErrNoRows
 }

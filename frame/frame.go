@@ -1,4 +1,3 @@
-// app.go
 package frame
 
 import (

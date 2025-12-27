@@ -1,4 +1,3 @@
-// db.go
 package frame
 
 import (
@@ -29,9 +28,6 @@ func (app *App) PrepareTables(ctx context.Context) error {
 	for _, r := range app.Routes {
 		if r.Table == "" || strings.HasPrefix(r.Table, "$") {
 			continue
-		}
-		if !IsValidTableName(r.Table) {
-			return fmt.Errorf("invalid route table name: %q", r.Table)
 		}
 		tables = append(tables, r.Table)
 	}
