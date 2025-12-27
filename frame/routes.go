@@ -34,7 +34,7 @@ type Route struct {
 
 type AddedRoute struct {
 	Pattern *regexp.Regexp
-	Handler func(c *wsrooms.Conn, msg *wsrooms.Message, matches []string)
+	Handler func(app *App, c *wsrooms.Conn, msg *wsrooms.Message, matches []string)
 }
 
 type CompiledRoute struct {
@@ -115,7 +115,7 @@ func (app *App) setupRoutes() error {
 	return nil
 }
 
-func (app *App) AddRoute(pattern string, handler func(c *wsrooms.Conn, msg *wsrooms.Message, matches []string)) error {
+func (app *App) AddRoute(pattern string, handler func(app *App, c *wsrooms.Conn, msg *wsrooms.Message, matches []string)) error {
 	re, err := regexp.Compile(pattern)
 	if err != nil {
 		return fmt.Errorf("invalid route pattern %q: %w", pattern, err)
@@ -177,54 +177,83 @@ func resolveDynamic(field string, subs []string) string {
 	return ""
 }
 
-func (app *App) processRequest(c *wsrooms.Conn, msg *wsrooms.Message) {
-	path := string(msg.Payload)
+func (app *App) matchAddedRoute(c *wsrooms.Conn, msg *wsrooms.Message, path string) bool {
 	for _, added := range app.Added {
 		if subs := added.Pattern.FindStringSubmatch(path); subs != nil {
-			added.Handler(c, msg, subs)
-			return
+			added.Handler(app, c, msg, subs)
+			return true
 		}
 	}
+	return false
+}
+
+func (app *App) matchCompiledRoute(path string) (*CompiledRoute, []string) {
 	for _, cr := range app.CompiledRoutes {
 		if subs := cr.Pattern.FindStringSubmatch(path); subs != nil {
-			route := cr.Config
-			cfg := route.RouteConfig
-			priv, _ := c.Cookie["privilege"]
-			if priv == "admin" && (route.Admin.Template != "" || route.Admin.Controllers != "") {
-				cfg = route.Admin
-			} else if priv != "" && route.Authorized.Privilege != "" {
-				for _, allowed := range strings.Split(route.Authorized.Privilege, ",") {
-					if strings.TrimSpace(allowed) == priv {
-						cfg = route.Authorized
-						break
-					}
-				}
-			}
-			table := resolveDynamic(cfg.Table, subs)
-			key := resolveDynamic(cfg.Key, subs)
-			if table != "" && !IsValidTableName(table) {
-				log.Printf("Blocked invalid table %q in route", table)
-				return
-			}
-			var data interface{}
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			var errDB error
-			if table != "" {
-				if key != "" {
-					data, errDB = app.GetRow(ctx, table, key)
-				} else {
-					data, errDB = app.GetRows(ctx, table)
-				}
-				if errDB != nil {
-					log.Printf("DB error for %s: %v", path, errDB)
-					//	return
-				}
-			}
-			controllers := strings.Split(cfg.Controllers, ",")
-			app.Render(c, msg, cfg.Template, controllers, data)
-			return
+			return &cr, subs
 		}
 	}
-	log.Printf("No route matched: %s", path)
+	return nil, nil
+}
+
+func selectRouteConfig(route Route,	privilege string) RouteConfig {
+	// Admin override
+	if privilege == "admin" &&
+		(route.Admin.Template != "" || route.Admin.Controllers != "") {
+		return route.Admin
+	}
+	// Authorized users
+	if privilege != "" && route.Authorized.Privilege != "" {
+		for _, allowed := range strings.Split(route.Authorized.Privilege, ",") {
+			if strings.TrimSpace(allowed) == privilege {
+				return route.Authorized
+			}
+		}
+	}
+	// Default
+	return route.RouteConfig
+}
+
+func (app *App) resolveRouteData(ctx context.Context, cfg RouteConfig, subs []string) (interface{}, error) {
+	table := resolveDynamic(cfg.Table, subs)
+	key := resolveDynamic(cfg.Key, subs)
+	if table == "" {
+		return nil, nil
+	}
+	if !IsValidTableName(table) {
+		return nil, fmt.Errorf("invalid table name: %q", table)
+	}
+	if key != "" {
+		return app.GetRow(ctx, table, key)
+	}
+	return app.GetRows(ctx, table)
+}
+
+
+func (app *App) processRequest(c *wsrooms.Conn, msg *wsrooms.Message) {
+	path := string(msg.Payload)
+	// 1. Added routes (custom handlers)
+	if app.matchAddedRoute(c, msg, path) {
+		return
+	}
+	// 2. Match configured routes
+	cr, subs := app.matchCompiledRoute(path)
+	if cr == nil {
+		log.Printf("No route matched: %s", path)
+		return
+	}
+	// 3. Select route config by privilege
+	privilege := c.Cookie["privilege"]
+	cfg := selectRouteConfig(cr.Config, privilege)
+	// 4. Load data (if any)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	data, err := app.resolveRouteData(ctx, cfg, subs)
+	if err != nil {
+		log.Printf("Route data error (%s): %v", path, err)
+		return
+	}
+	// 5. Render response
+	controllers := strings.Split(cfg.Controllers, ",")
+	app.Render(c, msg, cfg.Template, controllers, data)
 }

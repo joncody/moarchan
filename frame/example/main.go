@@ -11,9 +11,7 @@ import (
 	"moarchan/frame"
 )
 
-var app *frame.App
-
-func testHandler(c *wsrooms.Conn, msg *wsrooms.Message, matches []string) {
+func testHandler(app *frame.App, c *wsrooms.Conn, msg *wsrooms.Message, matches []string) {
 	log.Printf("Test route matched: %v", matches)
 	app.Render(c, msg, "index-added", []string{"index"}, nil)
 }
