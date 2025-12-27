@@ -16,7 +16,7 @@ func IsValidTableName(name string) bool {
 	return validTableNameRegex.MatchString(name)
 }
 
-func (app *App) prepareTables(ctx context.Context) error {
+func (app *App) PrepareTables(ctx context.Context) error {
 	const queryTemplate = `
 		CREATE TABLE IF NOT EXISTS %s (
 			id BIGSERIAL PRIMARY KEY,

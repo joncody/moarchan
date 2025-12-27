@@ -39,8 +39,8 @@ func validateAlias(alias string) bool {
 	return true
 }
 
-// isAliasAvailable returns true if the alias is not taken.
-func (app *App) isAliasAvailable(ctx context.Context, alias string) (bool, error) {
+// IsAliasAvailable returns true if the alias is not taken.
+func (app *App) IsAliasAvailable(ctx context.Context, alias string) (bool, error) {
 	var exists bool
 	err := app.Driver.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM auth WHERE key = $1)`, alias).Scan(&exists)
 	if err != nil {
@@ -49,8 +49,8 @@ func (app *App) isAliasAvailable(ctx context.Context, alias string) (bool, error
 	return !exists, nil
 }
 
-// createUser hashes the password and inserts a new user into the auth table.
-func (app *App) createUser(ctx context.Context, alias, password string) (*Auth, error) {
+// CreateUser hashes the password and inserts a new user into the auth table.
+func (app *App) CreateUser(ctx context.Context, alias, password string) (*Auth, error) {
 	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, fmt.Errorf("hash password: %w", err)
@@ -70,8 +70,8 @@ func (app *App) createUser(ctx context.Context, alias, password string) (*Auth, 
 	return auth, nil
 }
 
-// verifyCredentials validates alias/password and returns the user auth data on success.
-func (app *App) verifyCredentials(ctx context.Context, alias, password string) (*Auth, error) {
+// VerifyCredentials validates alias/password and returns the user auth data on success.
+func (app *App) VerifyCredentials(ctx context.Context, alias, password string) (*Auth, error) {
 	var data []byte
 	err := app.Driver.QueryRowContext(ctx, `SELECT value FROM auth WHERE key = $1`, alias).Scan(&data)
 	if err != nil {
@@ -92,7 +92,7 @@ func (app *App) verifyCredentials(ctx context.Context, alias, password string) (
 
 // ———————— HTTP Handlers ————————
 
-func (app *App) register(w http.ResponseWriter, r *http.Request) {
+func (app *App) Register(w http.ResponseWriter, r *http.Request) {
 	alias := strings.TrimSpace(r.FormValue("alias"))
 	password := r.FormValue("password")
 	if !validateAlias(alias) || password == "" {
@@ -101,7 +101,7 @@ func (app *App) register(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	available, err := app.isAliasAvailable(ctx, alias)
+	available, err := app.IsAliasAvailable(ctx, alias)
 	if err != nil {
 		log.Printf("Registration DB error: %v", err)
 		http.Error(w, "Registration unavailable", http.StatusInternalServerError)
@@ -111,20 +111,20 @@ func (app *App) register(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Alias already taken", http.StatusConflict)
 		return
 	}
-	auth, err := app.createUser(ctx, alias, password)
+	auth, err := app.CreateUser(ctx, alias, password)
 	if err != nil {
 		log.Printf("Failed to create user %q: %v", alias, err)
 		http.Error(w, "Registration unavailable", http.StatusInternalServerError)
 		return
 	}
-	if err := app.setSession(w, r, alias, auth.Privilege); err != nil {
+	if err := app.SetSession(w, r, alias, auth.Privilege); err != nil {
 		log.Printf("Session setup failed for %q: %v", alias, err)
 		http.Error(w, "Login failed", http.StatusInternalServerError)
 		return
 	}
 }
 
-func (app *App) login(w http.ResponseWriter, r *http.Request) {
+func (app *App) Login(w http.ResponseWriter, r *http.Request) {
 	alias := strings.TrimSpace(r.FormValue("alias"))
 	password := r.FormValue("password")
 	if alias == "" || password == "" {
@@ -133,21 +133,21 @@ func (app *App) login(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	auth, err := app.verifyCredentials(ctx, alias, password)
+	auth, err := app.VerifyCredentials(ctx, alias, password)
 	if err != nil {
 		log.Printf("Login failed for %q: %v", alias, err)
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 		return
 	}
-	if err := app.setSession(w, r, alias, auth.Privilege); err != nil {
+	if err := app.SetSession(w, r, alias, auth.Privilege); err != nil {
 		log.Printf("Session setup failed for %q: %v", alias, err)
 		http.Error(w, "Login failed", http.StatusInternalServerError)
 		return
 	}
 }
 
-func (app *App) logout(w http.ResponseWriter, r *http.Request) {
-	if err := app.clearSession(w, r); err != nil {
+func (app *App) Logout(w http.ResponseWriter, r *http.Request) {
+	if err := app.ClearSession(w, r); err != nil {
 		log.Printf("Session clear error: %v", err)
 		// Proceed anyway — user should be logged out from perspective
 	}

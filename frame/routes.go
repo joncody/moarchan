@@ -79,7 +79,7 @@ var TemplateFuncs = template.FuncMap{
 	"fromkey":   FromKey,
 }
 
-func (app *App) compileRoutes() error {
+func (app *App) CompileRoutes() error {
 	compiled := make([]CompiledRoute, 0, len(app.Routes))
 	for _, r := range app.Routes {
 		patternStr := r.Route
@@ -102,14 +102,14 @@ func (app *App) compileRoutes() error {
 	return nil
 }
 
-func (app *App) setupRoutes() error {
-	app.Router.HandleFunc("/login", app.login).Methods("POST")
-	app.Router.HandleFunc("/register", app.register).Methods("POST")
-	app.Router.HandleFunc("/logout", app.logout).Methods("POST")
-	app.Router.HandleFunc("/ws", wsrooms.SocketHandler(app.getSessionValues)).Methods("GET")
+func (app *App) SetupRoutes() error {
+	app.Router.HandleFunc("/login", app.Login).Methods("POST")
+	app.Router.HandleFunc("/register", app.Register).Methods("POST")
+	app.Router.HandleFunc("/logout", app.Logout).Methods("POST")
+	app.Router.HandleFunc("/ws", wsrooms.SocketHandler(app.GetSessionValues)).Methods("GET")
 	app.Router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("./static/"))))
 	app.Router.PathPrefix("/").HandlerFunc(app.baseHandler).Methods("GET")
-	if err := app.compileRoutes(); err != nil {
+	if err := app.CompileRoutes(); err != nil {
 		return fmt.Errorf("compile routes: %w", err)
 	}
 	return nil
@@ -132,10 +132,10 @@ func (app *App) baseHandler(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-    cook, err := app.getSessionValues(r)
-    if err != nil {
-        cook = nil
-    }
+	cook, err := app.GetSessionValues(r)
+	if err != nil {
+		cook = nil
+	}
 	if err := app.Templates.ExecuteTemplate(w, "base", cook); err != nil {
 		log.Printf("Template error in baseHandler: %v", err)
 		http.Error(w, "Render failed", http.StatusInternalServerError)
@@ -190,7 +190,7 @@ func (app *App) matchAddedRoute(c *wsrooms.Conn, msg *wsrooms.Message, path stri
 	return false
 }
 
-func (app *App) matchCompiledRoute(path string) (*CompiledRoute, []string) {
+func (app *App) MatchCompiledRoute(path string) (*CompiledRoute, []string) {
 	for _, cr := range app.CompiledRoutes {
 		if subs := cr.Pattern.FindStringSubmatch(path); subs != nil {
 			return &cr, subs
@@ -199,7 +199,7 @@ func (app *App) matchCompiledRoute(path string) (*CompiledRoute, []string) {
 	return nil, nil
 }
 
-func selectRouteConfig(route Route,	privilege string) RouteConfig {
+func SelectRouteConfig(route Route, privilege string) RouteConfig {
 	// Admin override
 	if privilege == "admin" &&
 		(route.Admin.Template != "" || route.Admin.Controllers != "") {
@@ -217,7 +217,7 @@ func selectRouteConfig(route Route,	privilege string) RouteConfig {
 	return route.RouteConfig
 }
 
-func (app *App) resolveRouteData(ctx context.Context, cfg RouteConfig, subs []string) (interface{}, error) {
+func (app *App) ResolveRouteData(ctx context.Context, cfg RouteConfig, subs []string) (interface{}, error) {
 	table := resolveDynamic(cfg.Table, subs)
 	key := resolveDynamic(cfg.Key, subs)
 	if table == "" {
@@ -232,26 +232,25 @@ func (app *App) resolveRouteData(ctx context.Context, cfg RouteConfig, subs []st
 	return app.GetRows(ctx, table)
 }
 
-
-func (app *App) processRequest(c *wsrooms.Conn, msg *wsrooms.Message) {
+func (app *App) ProcessRequest(c *wsrooms.Conn, msg *wsrooms.Message) {
 	path := string(msg.Payload)
 	// 1. Added routes (custom handlers)
 	if app.matchAddedRoute(c, msg, path) {
 		return
 	}
 	// 2. Match configured routes
-	cr, subs := app.matchCompiledRoute(path)
+	cr, subs := app.MatchCompiledRoute(path)
 	if cr == nil {
 		log.Printf("No route matched: %s", path)
 		return
 	}
 	// 3. Select route config by privilege
 	privilege := c.Cookie["privilege"]
-	cfg := selectRouteConfig(cr.Config, privilege)
+	cfg := SelectRouteConfig(cr.Config, privilege)
 	// 4. Load data (if any)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	data, err := app.resolveRouteData(ctx, cfg, subs)
+	data, err := app.ResolveRouteData(ctx, cfg, subs)
 	if err != nil {
 		log.Printf("Route data error (%s): %v", path, err)
 		return

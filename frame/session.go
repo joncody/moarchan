@@ -1,7 +1,7 @@
 package frame
 
 import (
-    "fmt"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -10,7 +10,7 @@ import (
 
 const sessionTTL = 24 * time.Hour
 
-func newSessionStore(name, hashKey, blockKey string, secure bool) (sessions.Store, error) {
+func NewSessionStore(name, hashKey, blockKey string, secure bool) (sessions.Store, error) {
 	if len(hashKey) < 32 {
 		return nil, fmt.Errorf("hash key must be at least 32 bytes (got %d)", len(hashKey))
 	}
@@ -28,7 +28,7 @@ func newSessionStore(name, hashKey, blockKey string, secure bool) (sessions.Stor
 	return store, nil
 }
 
-func (app *App) getSessionValues(r *http.Request) (map[string]string, error) {
+func (app *App) GetSessionValues(r *http.Request) (map[string]string, error) {
 	session, err := app.SessionStore.Get(r, app.Name)
 	if err != nil {
 		return nil, err
@@ -43,17 +43,17 @@ func (app *App) getSessionValues(r *http.Request) (map[string]string, error) {
 	return values, nil
 }
 
-func (app *App) setSession(w http.ResponseWriter, r *http.Request, alias, privilege string) error {
-    session, err := app.SessionStore.Get(r, app.Name)
-    if err != nil {
-        return err
-    }
-    session.Values["alias"] = alias
-    session.Values["privilege"] = privilege
-    return session.Save(r, w)
+func (app *App) SetSession(w http.ResponseWriter, r *http.Request, alias, privilege string) error {
+	session, err := app.SessionStore.Get(r, app.Name)
+	if err != nil {
+		return err
+	}
+	session.Values["alias"] = alias
+	session.Values["privilege"] = privilege
+	return session.Save(r, w)
 }
 
-func (app *App) clearSession(w http.ResponseWriter, r *http.Request) error {
+func (app *App) ClearSession(w http.ResponseWriter, r *http.Request) error {
 	session, err := app.SessionStore.Get(r, app.Name)
 	if err != nil {
 		return err
