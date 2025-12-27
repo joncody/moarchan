@@ -1,7 +1,7 @@
 {
     "port": "8080",
-    "hashkey": "32-byte-long-key-for-hashing-!",
-    "blockkey": "32-byte-long-key-for-encryptn-!",
+    "hashkey": "12345678901234567890123456789012",
+    "blockkey": "abcdefghijklmnopqrstuvwx12345678",
     "cookiename": "moarchan",
     "database": {
         "user": "moarchan",
