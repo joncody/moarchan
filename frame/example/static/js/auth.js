@@ -24,17 +24,15 @@ frame.controllers.auth = function (global) {
         fetch("/login", {
             method: "POST",
             body: fd,
-            headers: { "X-Requested-With": "XMLHttpRequest" }
-        })
-        .then(res => {
+            headers: {"X-Requested-With": "XMLHttpRequest"}
+        }).then(res => {
             if (res.ok) {
                 global.location.reload();
             } else {
                 // Optional: display error (e.g., "Invalid credentials")
                 console.warn("Login failed:", res.status);
             }
-        })
-        .catch(err => {
+        }).catch(err => {
             console.error("Login request failed:", err);
         });
     }
@@ -58,9 +56,8 @@ frame.controllers.auth = function (global) {
         fetch("/register", {
             method: "POST",
             body: fd,
-            headers: { "X-Requested-With": "XMLHttpRequest" }
-        })
-        .then(res => {
+            headers: {"X-Requested-With": "XMLHttpRequest"}
+        }).then(res => {
             if (res.ok) {
                 global.location.reload();
             } else if (res.status === 409) {
@@ -69,8 +66,7 @@ frame.controllers.auth = function (global) {
             } else {
                 console.warn("Registration failed:", res.status);
             }
-        })
-        .catch(err => {
+        }).catch(err => {
             console.error("Registration request failed:", err);
         });
     }
@@ -79,14 +75,12 @@ frame.controllers.auth = function (global) {
         e.preventDefault();
         fetch("/logout", {
             method: "POST",
-            headers: { "X-Requested-With": "XMLHttpRequest" }
-        })
-        .then(res => {
+            headers: {"X-Requested-With": "XMLHttpRequest"}
+        }).then(res => {
             if (res.ok) {
                 global.location.reload();
             }
-        })
-        .catch(err => {
+        }).catch(err => {
             console.error("Logout failed:", err);
         });
     }
