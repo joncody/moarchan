@@ -92,8 +92,7 @@ func (app *App) register(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 	var exists bool
-	err := app.Driver.QueryRowContext(ctx,
-		`SELECT EXISTS(SELECT 1 FROM auth WHERE key = $1)`, alias).Scan(&exists)
+	err := app.Driver.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM auth WHERE key = $1)`, alias).Scan(&exists)
 	if err != nil {
 		log.Printf("Database error checking alias existence: %v", err)
 		http.Error(w, "Registration unavailable", http.StatusInternalServerError)
@@ -119,8 +118,7 @@ func (app *App) register(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Registration unavailable", http.StatusInternalServerError)
 		return
 	}
-	_, err = app.Driver.ExecContext(ctx,
-		`INSERT INTO auth (key, value) VALUES ($1, $2)`, alias, data)
+	_, err = app.Driver.ExecContext(ctx, `INSERT INTO auth (key, value) VALUES ($1, $2)`, alias, data)
 	if err != nil {
 		log.Printf("Database insert error for alias %q: %v", alias, err)
 		http.Error(w, "Registration unavailable", http.StatusInternalServerError)
@@ -142,8 +140,7 @@ func (app *App) login(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 	var data []byte
-	err := app.Driver.QueryRowContext(ctx,
-		`SELECT value FROM auth WHERE key = $1`, alias).Scan(&data)
+	err := app.Driver.QueryRowContext(ctx, `SELECT value FROM auth WHERE key = $1`, alias).Scan(&data)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "Invalid credentials", http.StatusUnauthorized)
