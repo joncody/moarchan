@@ -106,7 +106,7 @@ func (app *App) setupRoutes() error {
 	app.Router.HandleFunc("/login", app.login).Methods("POST")
 	app.Router.HandleFunc("/register", app.register).Methods("POST")
 	app.Router.HandleFunc("/logout", app.logout).Methods("POST")
-	app.Router.HandleFunc("/ws", wsrooms.SocketHandler(app.ReadCookie)).Methods("GET")
+	app.Router.HandleFunc("/ws", wsrooms.SocketHandler(app.getSessionValues)).Methods("GET")
 	app.Router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("./static/"))))
 	app.Router.PathPrefix("/").HandlerFunc(app.baseHandler).Methods("GET")
 	if err := app.compileRoutes(); err != nil {
@@ -132,7 +132,10 @@ func (app *App) baseHandler(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	cook := app.ReadCookie(r)
+    cook, err := app.getSessionValues(r)
+    if err != nil {
+        cook = nil
+    }
 	if err := app.Templates.ExecuteTemplate(w, "base", cook); err != nil {
 		log.Printf("Template error in baseHandler: %v", err)
 		http.Error(w, "Render failed", http.StatusInternalServerError)

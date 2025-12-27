@@ -36,9 +36,9 @@ func main() {
 		}
 		// Optionally: close channel to signal exit
 	}()
-	log.Printf("✅ %s started on port %s", app.Name, app.Port)
-	if app.SSLPort != "0" {
-		log.Printf("🔒 HTTPS enabled on port %s", app.SSLPort)
+	log.Printf("✅ %s started on port %s", app.AppConfig.Name, app.AppConfig.Port)
+	if app.AppConfig.SSLPort != "" && app.AppConfig.SSLPort != "0" {
+		log.Printf("🔒 HTTPS enabled on port %s", app.AppConfig.SSLPort)
 	}
 	// Wait for interrupt signal
 	<-sigChan

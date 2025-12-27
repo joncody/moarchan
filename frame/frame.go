@@ -12,7 +12,7 @@ import (
 	"os"
 
 	"github.com/gorilla/mux"
-	"github.com/gorilla/securecookie"
+	"github.com/gorilla/sessions"
 	"github.com/joncody/wsrooms"
 	_ "github.com/lib/pq"
 )
@@ -29,17 +29,21 @@ const (
 	MinBlockKeyLen = 32
 )
 
-type App struct {
+type AppConfig struct {
 	Name           string `json:"name"`
 	HashKey        string `json:"hashkey"`
 	BlockKey       string `json:"blockkey"`
-	SecureCookie   *securecookie.SecureCookie
-	Templates      *template.Template
 	Port           string   `json:"port"`
 	SSLPort        string   `json:"sslport"`
 	Database       DBConfig `json:"database"`
-	Driver         *sql.DB
 	Routes         []Route `json:"routes"`
+}
+
+type App struct {
+    AppConfig
+    SessionStore   sessions.Store
+	Templates      *template.Template
+	Driver         *sql.DB
 	Added          []AddedRoute
 	CompiledRoutes []CompiledRoute
 	Router         *mux.Router
@@ -51,46 +55,44 @@ func logFatalIfErr(err error) {
 	}
 }
 
-func (app *App) initSecureCookie() error {
-	if len(app.HashKey) < MinHashKeyLen {
-		return fmt.Errorf("hash key must be ≥%d bytes", MinHashKeyLen)
-	}
-	if len(app.BlockKey) < MinBlockKeyLen {
-		return fmt.Errorf("block key must be ≥%d bytes", MinBlockKeyLen)
-	}
-	app.SecureCookie = securecookie.New([]byte(app.HashKey), []byte(app.BlockKey))
-	return nil
-}
-
 func (app *App) Start() error {
+    // Build DB connection string
 	dbstring := fmt.Sprintf(
 		"user=%s password=%s dbname=%s sslmode=disable",
-		app.Database.User, app.Database.Password, app.Database.Name,
+		app.AppConfig.Database.User, app.AppConfig.Database.Password, app.AppConfig.Database.Name,
 	)
+    // Open DB
 	db, err := sql.Open("postgres", dbstring)
 	if err != nil {
 		return fmt.Errorf("open DB: %w", err)
 	}
 	app.Driver = db
+    // Ping DB to ensure connectivity
 	ctx := context.Background()
 	if err := db.PingContext(ctx); err != nil {
 		db.Close()
 		return fmt.Errorf("ping DB: %w", err)
 	}
-	if err := app.PrepareTables(ctx); err != nil {
+    // Prepare tables
+	if err := app.prepareTables(ctx); err != nil {
 		db.Close()
 		return fmt.Errorf("prepare tables: %w", err)
 	}
-	if app.SSLPort != "" && app.SSLPort != "0" {
+	if app.AppConfig.SSLPort != "" && app.AppConfig.SSLPort != "0" {
 		go func() {
-			addr := ":" + app.SSLPort
+			addr := ":" + app.AppConfig.SSLPort
+            log.Printf("Starting HTTPs server on %s", addr)
 			if err := http.ListenAndServeTLS(addr, "server.crt", "server.key", app.Router); err != nil {
-				logFatalIfErr(fmt.Errorf("HTTPS server on %s failed: %w", addr, err))
+                logFatalIfErr(fmt.Errorf("HTTPS server failed on %s: %w", addr, err))
 			}
 		}()
 	}
-	addr := ":" + app.Port
-	return fmt.Errorf("HTTP server on %s failed: %w", addr, http.ListenAndServe(addr, app.Router))
+	addr := ":" + app.AppConfig.Port
+    log.Printf("Starting HTTP server on %s", addr)
+    if err := http.ListenAndServe(addr, app.Router); err != nil && !errors.Is(err, http.ErrServerClosed) {
+        return fmt.Errorf("HTTP server failed: %w", err)
+    }
+	return nil
 }
 
 func (app *App) Close() error {
@@ -102,14 +104,16 @@ func (app *App) Close() error {
 
 func NewApp(configPath string) (*App, error) {
 	app := &App{
-		Name:    "frame",
-		Port:    "8080",
-		SSLPort: "0",
-		Database: DBConfig{
-			User:     "dbuser",
-			Password: "dbpass",
-			Name:     "dbname",
-		},
+        AppConfig: AppConfig{
+            Name:    "frame",
+            Port:    "8080",
+            SSLPort: "0",
+            Database: DBConfig{
+                User:     "dbuser",
+                Password: "dbpass",
+                Name:     "dbname",
+            },
+        },
 		Router: mux.NewRouter().StrictSlash(false),
 	}
 	if configPath != "" {
@@ -117,21 +121,29 @@ func NewApp(configPath string) (*App, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read config %q: %w", configPath, err)
 		}
-		if err := json.Unmarshal(data, app); err != nil {
+        var cfg AppConfig
+		if err := json.Unmarshal(data, &cfg); err != nil {
 			return nil, fmt.Errorf("parse config: %w", err)
 		}
+        app.AppConfig = cfg
 	}
-	if err := app.initSecureCookie(); err != nil {
-		return nil, err
-	}
-	var err error
+    // Setup session store
+    secure := app.AppConfig.SSLPort != "" && app.AppConfig.SSLPort != "0"
+    store, err := newSessionStore(app.AppConfig.Name, app.AppConfig.HashKey, app.AppConfig.BlockKey, secure)
+    if err != nil {
+        return nil, fmt.Errorf("session store: %w", err)
+    }
+    app.SessionStore = store
+    // Parse templates
 	app.Templates, err = template.New("").Funcs(TemplateFuncs).ParseGlob("./static/views/*")
 	if err != nil {
 		return nil, fmt.Errorf("parse templates: %w", err)
 	}
-	if err := app.setupRoutes(); err != nil {
+    // Setup routes
+	if err = app.setupRoutes(); err != nil {
 		return nil, fmt.Errorf("setup routes: %w", err)
 	}
+    // WebSocket event
 	wsrooms.Emitter.On("request", app.processRequest)
 	return app, nil
 }

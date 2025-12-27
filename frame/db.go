@@ -16,14 +16,13 @@ func IsValidTableName(name string) bool {
 	return validTableNameRegex.MatchString(name)
 }
 
-func (app *App) PrepareTables(ctx context.Context) error {
+func (app *App) prepareTables(ctx context.Context) error {
 	const queryTemplate = `
 		CREATE TABLE IF NOT EXISTS %s (
 			id BIGSERIAL PRIMARY KEY,
 			key TEXT UNIQUE NOT NULL,
 			value JSONB
 		)`
-
 	tables := []string{"auth"}
 	for _, r := range app.Routes {
 		if r.Table == "" || strings.HasPrefix(r.Table, "$") {
@@ -31,7 +30,6 @@ func (app *App) PrepareTables(ctx context.Context) error {
 		}
 		tables = append(tables, r.Table)
 	}
-
 	for _, table := range tables {
 		if !IsValidTableName(table) {
 			return fmt.Errorf("invalid table name: %q", table)
@@ -57,7 +55,6 @@ func (app *App) GetRow(ctx context.Context, table, key string) (map[string]inter
 		}
 		return nil, fmt.Errorf("query row in %q: %w", table, err)
 	}
-
 	var result map[string]interface{}
 	if err := json.Unmarshal(value, &result); err != nil {
 		return nil, fmt.Errorf("unmarshal JSON from %q (key=%q): %w", table, key, err)
@@ -75,7 +72,6 @@ func (app *App) GetRows(ctx context.Context, table string) ([]map[string]interfa
 		return nil, fmt.Errorf("query table %q: %w", table, err)
 	}
 	defer rows.Close()
-
 	var results []map[string]interface{}
 	for rows.Next() {
 		var value []byte
@@ -88,7 +84,6 @@ func (app *App) GetRows(ctx context.Context, table string) ([]map[string]interfa
 		}
 		results = append(results, entry)
 	}
-
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("row iteration error in %q: %w", table, err)
 	}
@@ -103,7 +98,6 @@ func (app *App) InsertRow(ctx context.Context, table, key string, value interfac
 	if err != nil {
 		return fmt.Errorf("marshal value for %q/%q: %w", table, key, err)
 	}
-
 	query := fmt.Sprintf(`
 		INSERT INTO %s (key, value)
 		VALUES ($1, $2)

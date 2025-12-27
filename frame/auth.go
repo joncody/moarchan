@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -18,11 +19,9 @@ type Auth struct {
 	Privilege    string `json:"privilege"`
 }
 
-const (
-	PrivilegeUser = "user"
-	sessionTTL    = 24 * time.Hour
-)
+const privilegeUser = "user"
 
+// validateAlias checks if an alias meets format requirements.
 func validateAlias(alias string) bool {
 	if len(alias) < 3 || len(alias) > 64 {
 		return false
@@ -40,47 +39,58 @@ func validateAlias(alias string) bool {
 	return true
 }
 
-func (app *App) ReadCookie(r *http.Request) map[string]string {
-	cookie, err := r.Cookie(app.Name)
+// isAliasAvailable returns true if the alias is not taken.
+func (app *App) isAliasAvailable(ctx context.Context, alias string) (bool, error) {
+	var exists bool
+	err := app.Driver.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM auth WHERE key = $1)`, alias).Scan(&exists)
 	if err != nil {
-		return nil
+		return false, fmt.Errorf("check alias existence: %w", err)
 	}
-	var value map[string]string
-	if err := app.SecureCookie.Decode(app.Name, cookie.Value, &value); err != nil {
-		log.Printf("Cookie decode error: %v", err)
-		return nil
-	}
-	return value
+	return !exists, nil
 }
 
-func (app *App) SetCookie(w http.ResponseWriter, r *http.Request, value map[string]string, logout bool) {
-	var encoded string
-	if !logout && value != nil {
-		var err error
-		encoded, err = app.SecureCookie.Encode(app.Name, value)
-		if err != nil {
-			log.Printf("Cookie encode error: %v", err)
-			http.Error(w, "Session error", http.StatusInternalServerError)
-			return
-		}
+// createUser hashes the password and inserts a new user into the auth table.
+func (app *App) createUser(ctx context.Context, alias, password string) (*Auth, error) {
+	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, fmt.Errorf("hash password: %w", err)
 	}
-	cookie := &http.Cookie{
-		Name:     app.Name,
-		Value:    encoded,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   r.TLS != nil,
-		SameSite: http.SameSiteLaxMode,
+	auth := &Auth{
+		PasswordHash: string(hashed),
+		Privilege:    privilegeUser,
 	}
-	if logout || value == nil {
-		cookie.MaxAge = -1
-		cookie.Expires = time.Now().Add(-24 * time.Hour)
-	} else {
-		cookie.MaxAge = int(sessionTTL.Seconds())
-		cookie.Expires = time.Now().Add(sessionTTL)
+	data, err := json.Marshal(auth)
+	if err != nil {
+		return nil, fmt.Errorf("marshal auth data: %w", err)
 	}
-	http.SetCookie(w, cookie)
+	_, err = app.Driver.ExecContext(ctx, `INSERT INTO auth (key, value) VALUES ($1, $2)`, alias, data)
+	if err != nil {
+		return nil, fmt.Errorf("insert user record: %w", err)
+	}
+	return auth, nil
 }
+
+// verifyCredentials validates alias/password and returns the user auth data on success.
+func (app *App) verifyCredentials(ctx context.Context, alias, password string) (*Auth, error) {
+	var data []byte
+	err := app.Driver.QueryRowContext(ctx, `SELECT value FROM auth WHERE key = $1`, alias).Scan(&data)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errors.New("invalid alias or password")
+		}
+		return nil, fmt.Errorf("lookup user: %w", err)
+	}
+	var auth Auth
+	if err := json.Unmarshal(data, &auth); err != nil {
+		return nil, fmt.Errorf("corrupt auth data for alias %q", alias)
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(auth.PasswordHash), []byte(password)); err != nil {
+		return nil, errors.New("invalid alias or password")
+	}
+	return &auth, nil
+}
+
+// ———————— HTTP Handlers ————————
 
 func (app *App) register(w http.ResponseWriter, r *http.Request) {
 	alias := strings.TrimSpace(r.FormValue("alias"))
@@ -91,43 +101,27 @@ func (app *App) register(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	var exists bool
-	err := app.Driver.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM auth WHERE key = $1)`, alias).Scan(&exists)
+	available, err := app.isAliasAvailable(ctx, alias)
 	if err != nil {
-		log.Printf("Database error checking alias existence: %v", err)
+		log.Printf("Registration DB error: %v", err)
 		http.Error(w, "Registration unavailable", http.StatusInternalServerError)
 		return
 	}
-	if exists {
+	if !available {
 		http.Error(w, "Alias already taken", http.StatusConflict)
 		return
 	}
-	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	auth, err := app.createUser(ctx, alias, password)
 	if err != nil {
-		log.Printf("Password hashing failed: %v", err)
+		log.Printf("Failed to create user %q: %v", alias, err)
 		http.Error(w, "Registration unavailable", http.StatusInternalServerError)
 		return
 	}
-	auth := Auth{
-		PasswordHash: string(hashed),
-		Privilege:    PrivilegeUser,
-	}
-	data, err := json.Marshal(auth)
-	if err != nil {
-		log.Printf("JSON marshal error: %v", err)
-		http.Error(w, "Registration unavailable", http.StatusInternalServerError)
+	if err := app.setSession(w, r, alias, auth.Privilege); err != nil {
+		log.Printf("Session setup failed for %q: %v", alias, err)
+		http.Error(w, "Login failed", http.StatusInternalServerError)
 		return
 	}
-	_, err = app.Driver.ExecContext(ctx, `INSERT INTO auth (key, value) VALUES ($1, $2)`, alias, data)
-	if err != nil {
-		log.Printf("Database insert error for alias %q: %v", alias, err)
-		http.Error(w, "Registration unavailable", http.StatusInternalServerError)
-		return
-	}
-	app.SetCookie(w, r, map[string]string{
-		"alias":     alias,
-		"privilege": auth.Privilege,
-	}, false)
 }
 
 func (app *App) login(w http.ResponseWriter, r *http.Request) {
@@ -139,33 +133,23 @@ func (app *App) login(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	var data []byte
-	err := app.Driver.QueryRowContext(ctx, `SELECT value FROM auth WHERE key = $1`, alias).Scan(&data)
+	auth, err := app.verifyCredentials(ctx, alias, password)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "Invalid credentials", http.StatusUnauthorized)
-		} else {
-			log.Printf("Database error during login: %v", err)
-			http.Error(w, "Login unavailable", http.StatusInternalServerError)
-		}
-		return
-	}
-	var auth Auth
-	if err := json.Unmarshal(data, &auth); err != nil {
-		log.Printf("Failed to unmarshal auth data for alias %q", alias)
-		http.Error(w, "Login unavailable", http.StatusInternalServerError)
-		return
-	}
-	if err := bcrypt.CompareHashAndPassword([]byte(auth.PasswordHash), []byte(password)); err != nil {
+		log.Printf("Login failed for %q: %v", alias, err)
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 		return
 	}
-	app.SetCookie(w, r, map[string]string{
-		"alias":     alias,
-		"privilege": auth.Privilege,
-	}, false)
+	if err := app.setSession(w, r, alias, auth.Privilege); err != nil {
+		log.Printf("Session setup failed for %q: %v", alias, err)
+		http.Error(w, "Login failed", http.StatusInternalServerError)
+		return
+	}
 }
 
 func (app *App) logout(w http.ResponseWriter, r *http.Request) {
-	app.SetCookie(w, r, nil, true)
+	if err := app.clearSession(w, r); err != nil {
+		log.Printf("Session clear error: %v", err)
+		// Proceed anyway — user should be logged out from perspective
+	}
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
