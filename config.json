@@ -1,7 +1,7 @@
 {
     "port": "8080",
-    "hashkey": "moar-secret-alot-secret-much-moar-secret",
-    "blockkey": "more-moar-secret-alot-secret-much-moar-secret",
+    "hashkey": "32-byte-long-key-for-hashing-!",
+    "blockkey": "32-byte-long-key-for-encryptn-!",
     "cookiename": "moarchan",
     "database": {
         "user": "moarchan",

@@ -6,58 +6,127 @@ import frame from "./frame.js";
 frame.controllers.auth = function (global) {
     "use strict";
 
-    function enter() {
-        const type = dom(".form-toggler").html() === "Login" ? "register" : "login";
-        const alias = dom(".form-input[name='alias']").attr("value");
-        const passhash = sjcl.codec.hex.fromBits(sjcl.hash.sha256.hash(dom(".form-input[name='password']").attr("value")));
-        const passhash_repeat = sjcl.codec.hex.fromBits(sjcl.hash.sha256.hash(dom(".form-input[name='password-repeat']").attr("value")));
-        const xhr = new XMLHttpRequest();
-        const fd = new FormData();
+    // ================ Event Handlers ================
 
-        dom(".form-input[name='password']").attr("value", "");
-        dom(".form-input[name='password-repeat']").attr("value", "");
-        if (type === "register" && passhash !== passhash_repeat) {
+    function handleLogin(e) {
+        e.preventDefault();
+        const alias = dom(".form-input[name='alias']").get(0).value.trim();
+        const password = dom(".form-input[name='password']").get(0).value;
+
+        // Clear sensitive fields immediately
+        dom(".form-input[name='password']").get(0).value = "";
+
+        if (!alias || !password) {
+            // Optional: show validation message
             return;
         }
+
+        const fd = new FormData();
         fd.append("alias", alias);
-        fd.append("passhash", passhash);
-        xhr.onload = function () {
-            if (xhr.readyState === 4 && xhr.status === 200) {
+        fd.append("password", password);
+
+        fetch("/login", {
+            method: "POST",
+            body: fd,
+            headers: { "X-Requested-With": "XMLHttpRequest" }
+        })
+        .then(res => {
+            if (res.ok) {
                 global.location.reload();
+            } else {
+                // Optional: display error (e.g., "Invalid credentials")
+                console.warn("Login failed:", res.status);
             }
-        };
-        xhr.open("POST", type === "login" ? "/login" : "/register", true);
-        xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest");
-        xhr.responseType = "text";
-        xhr.send(fd);
+        })
+        .catch(err => {
+            console.error("Login request failed:", err);
+        });
     }
-    dom("button[name='enter']").on("click", enter, false);
 
-    function leave() {
-        const xhr = new XMLHttpRequest();
+    function handleRegister(e) {
+        e.preventDefault();
+        const alias = dom(".form-input[name='alias']").get(0).value.trim();
+        const password = dom(".form-input[name='password']").get(0).value;
+        const passwordRepeat = dom(".form-input[name='password-repeat']").get(0).value;
 
-        xhr.onload = function () {
-            if (xhr.readyState === 4 && xhr.status === 200) {
-                global.location.reload();
-            }
-        };
-        xhr.open("POST", "/logout", true);
-        xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest");
-        xhr.responseType = "text";
-        xhr.send(null);
-    }
-    dom("button[name='leave']").on("click", leave, false);
+        // Clear password fields immediately
+        dom(".form-input[name='password']").get(0).value = "";
+        dom(".form-input[name='password-repeat']").get(0).value = "";
 
-    function toggleForm(e) {
-        const node = dom(e.currentTarget);
-        if (node.text()[0] === "Register") {
-            node.html("Login");
-            dom(".form-input[name='password-repeat']").removeClass("collapsed");
-        } else {
-            node.html("Register");
-            dom(".form-input[name='password-repeat']").addClass("collapsed");
+        if (!alias || !password || password !== passwordRepeat) {
+            // Optional: show "Passwords don't match" etc.
+            return;
         }
-    }
-    dom(".form-toggler").on("click", toggleForm, false);
 
+        const fd = new FormData();
+        fd.append("alias", alias);
+        fd.append("password", password);
+
+        fetch("/register", {
+            method: "POST",
+            body: fd,
+            headers: { "X-Requested-With": "XMLHttpRequest" }
+        })
+        .then(res => {
+            if (res.ok) {
+                global.location.reload();
+            } else if (res.status === 409) {
+                // Alias already taken
+                console.warn("Alias already in use");
+            } else {
+                console.warn("Registration failed:", res.status);
+            }
+        })
+        .catch(err => {
+            console.error("Registration request failed:", err);
+        });
+    }
+
+    function handleLogout(e) {
+        e.preventDefault();
+        fetch("/logout", {
+            method: "POST",
+            headers: { "X-Requested-With": "XMLHttpRequest" }
+        })
+        .then(res => {
+            if (res.ok) {
+                global.location.reload();
+            }
+        })
+        .catch(err => {
+            console.error("Logout failed:", err);
+        });
+    }
+
+    // ================ Form State Management ================
+
+    function showLoginForm() {
+        dom(".form-toggler").html("Register");
+        dom(".form-input[name='password-repeat']").addClass("collapsed");
+        dom("button[name='enter']").off("click").on("click", handleLogin);
+    }
+
+    function showRegisterForm() {
+        dom(".form-toggler").html("Login");
+        dom(".form-input[name='password-repeat']").removeClass("collapsed");
+        dom("button[name='enter']").off("click").on("click", handleRegister);
+    }
+
+    // ================ Setup ================
+
+    // Initial state: login form
+    showLoginForm();
+
+    // Toggle between login/register
+    dom(".form-toggler").on("click", function () {
+        const isRegisterMode = dom(".form-input[name='password-repeat']").hasClass("collapsed");
+        if (isRegisterMode) {
+            showRegisterForm();
+        } else {
+            showLoginForm();
+        }
+    });
+
+    // Attach logout handler
+    dom("button[name='leave']").on("click", handleLogout, false);
 };

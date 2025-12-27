@@ -1,6 +1,8 @@
 module moarchan
 
-go 1.23.0
+go 1.24.0
+
+toolchain go1.24.11
 
 require (
 	github.com/google/uuid v1.6.0
@@ -9,6 +11,7 @@ require (
 	github.com/joncody/wsrooms v0.0.0-20250528055455-71307912d087
 	github.com/lib/pq v1.10.9
 	github.com/vincent-petithory/dataurl v1.0.0
+	golang.org/x/crypto v0.46.0
 )
 
 require (

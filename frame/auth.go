@@ -2,28 +2,42 @@ package frame
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/sha1"
-	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 type Auth struct {
-	Alias     string `json:"alias,omitempty"`
-	Passhash  string `json:"passhash"`
-	Salt      string `json:"salt"`
-	Hash      string `json:"hash"`
-	Privilege string `json:"privilege"`
+	PasswordHash string `json:"password_hash"`
+	Privilege    string `json:"privilege"`
 }
 
-func isErrNoRows(err error) bool {
-	return err == sql.ErrNoRows
+const (
+	PrivilegeUser = "user"
+	sessionTTL    = 24 * time.Hour
+)
+
+func validateAlias(alias string) bool {
+	if len(alias) < 3 || len(alias) > 64 {
+		return false
+	}
+	for _, r := range alias {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case r == '_' || r == '-':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func (app *App) ReadCookie(r *http.Request) map[string]string {
@@ -41,11 +55,8 @@ func (app *App) ReadCookie(r *http.Request) map[string]string {
 
 func (app *App) SetCookie(w http.ResponseWriter, r *http.Request, value map[string]string, logout bool) {
 	var encoded string
-	var err error
-
-	if logout || value == nil {
-		encoded = ""
-	} else {
+	if !logout && value != nil {
+		var err error
 		encoded, err = app.SecureCookie.Encode(app.Name, value)
 		if err != nil {
 			log.Printf("Cookie encode error: %v", err)
@@ -64,26 +75,21 @@ func (app *App) SetCookie(w http.ResponseWriter, r *http.Request, value map[stri
 	}
 
 	if logout || value == nil {
-		cookie.Expires = time.Unix(0, 0)
 		cookie.MaxAge = -1
+		cookie.Expires = time.Now().Add(-24 * time.Hour)
 	} else {
-		cookie.MaxAge = 60 * 60 * 24
-		cookie.Expires = time.Now().Add(24 * time.Hour)
+		cookie.MaxAge = int(sessionTTL.Seconds())
+		cookie.Expires = time.Now().Add(sessionTTL)
 	}
 
 	http.SetCookie(w, cookie)
 }
 
-func validateAlias(alias string) bool {
-	alias = strings.TrimSpace(alias)
-	return len(alias) >= 3 && len(alias) <= 64 && !strings.ContainsAny(alias, " <>@#$%^&*()+=[]{}|\\:;\"'?,./")
-}
-
 func (app *App) register(w http.ResponseWriter, r *http.Request) {
 	alias := strings.TrimSpace(r.FormValue("alias"))
-	passhash := r.FormValue("passhash")
+	password := r.FormValue("password")
 
-	if !validateAlias(alias) || passhash == "" {
+	if !validateAlias(alias) || password == "" {
 		http.Error(w, "Invalid alias or password", http.StatusBadRequest)
 		return
 	}
@@ -91,45 +97,43 @@ func (app *App) register(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	var existing []byte
-	err := app.Driver.QueryRowContext(ctx, `SELECT value FROM auth WHERE key = $1`, alias).Scan(&existing)
-	if err == nil {
+	var exists bool
+	err := app.Driver.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM auth WHERE key = $1)`, alias).Scan(&exists)
+	if err != nil {
+		log.Printf("Database error checking alias existence: %v", err)
+		http.Error(w, "Registration unavailable", http.StatusInternalServerError)
+		return
+	}
+	if exists {
 		http.Error(w, "Alias already taken", http.StatusConflict)
 		return
 	}
-	if err != nil && !isErrNoRows(err) {
-		log.Printf("DB error checking alias %q: %v", alias, err)
-		http.Error(w, "Registration failed", http.StatusInternalServerError)
-		return
-	}
 
-	random := make([]byte, 16)
-	if _, err := rand.Read(random); err != nil {
-		log.Printf("Salt generation failed: %v", err)
-		http.Error(w, "Registration failed", http.StatusInternalServerError)
+	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		log.Printf("Password hashing failed: %v", err)
+		http.Error(w, "Registration unavailable", http.StatusInternalServerError)
 		return
 	}
-	salt := fmt.Sprintf("%x", sha1.Sum(random))
-	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(alias+passhash+salt)))
 
 	auth := Auth{
-		Passhash:  passhash,
-		Salt:      salt,
-		Hash:      hash,
-		Privilege: "user",
+		PasswordHash: string(hashed),
+		Privilege:    PrivilegeUser,
 	}
 
 	data, err := json.Marshal(auth)
 	if err != nil {
-		log.Printf("Marshal error: %v", err)
-		http.Error(w, "Registration failed", http.StatusInternalServerError)
+		log.Printf("JSON marshal error: %v", err)
+		http.Error(w, "Registration unavailable", http.StatusInternalServerError)
 		return
 	}
 
-	_, err = app.Driver.ExecContext(ctx, `INSERT INTO auth (key, value) VALUES ($1, $2)`, alias, data)
+	_, err = app.Driver.ExecContext(ctx,
+		`INSERT INTO auth (key, value) VALUES ($1, $2)`, alias, data)
 	if err != nil {
-		log.Printf("Insert error for %q: %v", alias, err)
-		http.Error(w, "Registration failed", http.StatusInternalServerError)
+		log.Printf("Database insert error for alias %q: %v", alias, err)
+		http.Error(w, "Registration unavailable", http.StatusInternalServerError)
 		return
 	}
 
@@ -137,15 +141,13 @@ func (app *App) register(w http.ResponseWriter, r *http.Request) {
 		"alias":     alias,
 		"privilege": auth.Privilege,
 	}, false)
-
-	w.WriteHeader(http.StatusOK)
 }
 
 func (app *App) login(w http.ResponseWriter, r *http.Request) {
 	alias := strings.TrimSpace(r.FormValue("alias"))
-	passhash := r.FormValue("passhash")
+	password := r.FormValue("password")
 
-	if alias == "" || passhash == "" {
+	if alias == "" || password == "" {
 		http.Error(w, "Missing credentials", http.StatusBadRequest)
 		return
 	}
@@ -154,26 +156,26 @@ func (app *App) login(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	var data []byte
-	err := app.Driver.QueryRowContext(ctx, `SELECT value FROM auth WHERE key = $1`, alias).Scan(&data)
+	err := app.Driver.QueryRowContext(ctx,
+		`SELECT value FROM auth WHERE key = $1`, alias).Scan(&data)
 	if err != nil {
-		if isErrNoRows(err) {
+		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 		} else {
-			log.Printf("DB error during login for %q: %v", alias, err)
-			http.Error(w, "Login failed", http.StatusInternalServerError)
+			log.Printf("Database error during login: %v", err)
+			http.Error(w, "Login unavailable", http.StatusInternalServerError)
 		}
 		return
 	}
 
 	var auth Auth
 	if err := json.Unmarshal(data, &auth); err != nil {
-		log.Printf("Unmarshal error for %q: %v", alias, err)
-		http.Error(w, "Login failed", http.StatusInternalServerError)
+		log.Printf("Failed to unmarshal auth data for alias %q", alias)
+		http.Error(w, "Login unavailable", http.StatusInternalServerError)
 		return
 	}
 
-	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(alias+passhash+auth.Salt)))
-	if hash != auth.Hash {
+	if err := bcrypt.CompareHashAndPassword([]byte(auth.PasswordHash), []byte(password)); err != nil {
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 		return
 	}
@@ -182,11 +184,8 @@ func (app *App) login(w http.ResponseWriter, r *http.Request) {
 		"alias":     alias,
 		"privilege": auth.Privilege,
 	}, false)
-
-	w.WriteHeader(http.StatusOK)
 }
 
 func (app *App) logout(w http.ResponseWriter, r *http.Request) {
 	app.SetCookie(w, r, nil, true)
-	w.WriteHeader(http.StatusOK)
 }

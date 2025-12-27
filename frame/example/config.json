@@ -1,7 +1,7 @@
 {
     "name": "test",
-    "hashkey": "test-a-secret-is-alot-secret-very-much-secret",
-    "blockkey": "test-alot-secret-is-alot-secret-very-much-secret",
+    "hashkey": "12345678901234567890123456789012",
+    "blockkey": "abcdefghijklmnopqrstuvwx12345678",
     "port": "9001",
     "database": {
         "user": "myuser",
