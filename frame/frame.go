@@ -82,7 +82,6 @@ func (app *App) Start() error {
 		return fmt.Errorf("prepare tables: %w", err)
 	}
 	if app.SSLPort != "" && app.SSLPort != "0" {
-        log.Println(app)
 		go func() {
 			addr := ":" + app.SSLPort
 			if err := http.ListenAndServeTLS(addr, "server.crt", "server.key", app.Router); err != nil {
