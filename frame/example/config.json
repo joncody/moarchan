@@ -2,6 +2,7 @@
     "name": "test",
     "hashkey": "12345678901234567890123456789012",
     "blockkey": "abcdefghijklmnopqrstuvwx12345678",
+    "csrfkey": "y+gFWB6ixBrcDmrG2l1hkfqJQfm24m2qCLsrF893wI8=",
     "port": "9001",
     "database": {
         "user": "myuser",

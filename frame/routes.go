@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/joncody/wsrooms"
+	"github.com/gorilla/mux"
 )
 
 type RouteConfig struct {
@@ -102,17 +103,18 @@ func (app *App) CompileRoutes() error {
 	return nil
 }
 
-func (app *App) SetupRoutes() error {
-	app.Router.HandleFunc("/login", app.Login).Methods("POST")
-	app.Router.HandleFunc("/register", app.Register).Methods("POST")
-	app.Router.HandleFunc("/logout", app.Logout).Methods("POST")
-	app.Router.HandleFunc("/ws", wsrooms.SocketHandler(app.GetSessionValues)).Methods("GET")
-	app.Router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("./static/"))))
-	app.Router.PathPrefix("/").HandlerFunc(app.baseHandler).Methods("GET")
+func (app *App) SetupRoutes() (*mux.Router, error) {
+	router := mux.NewRouter().StrictSlash(false);
+	router.HandleFunc("/login", app.Login).Methods("POST")
+	router.HandleFunc("/register", app.Register).Methods("POST")
+	router.HandleFunc("/logout", app.Logout).Methods("POST")
+	router.HandleFunc("/ws", wsrooms.SocketHandler(app.GetSessionValues)).Methods("GET")
+	router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("./static/"))))
+	router.PathPrefix("/").HandlerFunc(app.baseHandler).Methods("GET")
 	if err := app.CompileRoutes(); err != nil {
-		return fmt.Errorf("compile routes: %w", err)
+		return nil, fmt.Errorf("compile routes: %w", err)
 	}
-	return nil
+    return router, nil
 }
 
 func (app *App) AddRoute(pattern string, handler func(app *App, c *wsrooms.Conn, msg *wsrooms.Message, matches []string)) error {

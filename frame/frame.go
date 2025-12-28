@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
 	"github.com/joncody/wsrooms"
 	_ "github.com/lib/pq"
@@ -46,7 +45,7 @@ type App struct {
 	Driver         *sql.DB
 	Added          []AddedRoute
 	CompiledRoutes []CompiledRoute
-	Router         *mux.Router
+	Router         http.Handler
 }
 
 func logFatalIfErr(err error) {
@@ -114,7 +113,6 @@ func NewApp(configPath string) (*App, error) {
 				Name:     "dbname",
 			},
 		},
-		Router: mux.NewRouter().StrictSlash(false),
 	}
 	if configPath != "" {
 		data, err := os.ReadFile(configPath)
@@ -140,7 +138,8 @@ func NewApp(configPath string) (*App, error) {
 		return nil, fmt.Errorf("parse templates: %w", err)
 	}
 	// Setup routes
-	if err = app.SetupRoutes(); err != nil {
+    app.Router, err = app.SetupRoutes()
+	if err != nil {
 		return nil, fmt.Errorf("setup routes: %w", err)
 	}
 	// WebSocket event
