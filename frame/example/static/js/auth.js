@@ -24,7 +24,9 @@ frame.controllers.auth = function (global) {
         fetch("/login", {
             method: "POST",
             body: fd,
-            headers: {"X-Requested-With": "XMLHttpRequest"}
+            headers: {
+                "X-Requested-With": "XMLHttpRequest"
+            }
         }).then(res => {
             if (res.ok) {
                 global.location.reload();
@@ -56,7 +58,10 @@ frame.controllers.auth = function (global) {
         fetch("/register", {
             method: "POST",
             body: fd,
-            headers: {"X-Requested-With": "XMLHttpRequest"}
+            credentials: "include",
+            headers: {
+                "X-Requested-With": "XMLHttpRequest"
+            }
         }).then(res => {
             if (res.ok) {
                 global.location.reload();
@@ -75,7 +80,10 @@ frame.controllers.auth = function (global) {
         e.preventDefault();
         fetch("/logout", {
             method: "POST",
-            headers: {"X-Requested-With": "XMLHttpRequest"}
+            credentials: "include",
+            headers: {
+                "X-Requested-With": "XMLHttpRequest"
+            }
         }).then(res => {
             if (res.ok) {
                 global.location.reload();

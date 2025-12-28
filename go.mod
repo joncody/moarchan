@@ -6,6 +6,8 @@ toolchain go1.24.11
 
 require (
 	github.com/google/uuid v1.6.0
+	github.com/gorilla/csrf v1.7.3
+	github.com/gorilla/handlers v1.5.2
 	github.com/gorilla/mux v1.8.1
 	github.com/gorilla/sessions v1.4.0
 	github.com/joncody/wsrooms v0.0.0-20251227204616-833eba2f20ab
@@ -16,6 +18,7 @@ require (
 
 require (
 	github.com/chuckpreslar/emission v0.0.0-20170206194824-a7ddd980baf9 // indirect
+	github.com/felixge/httpsnoop v1.0.3 // indirect
 	github.com/gorilla/securecookie v1.1.2 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 )

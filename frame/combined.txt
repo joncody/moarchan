@@ -1,0 +1,781 @@
+===== auth.go =====
+package frame
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log"
+	"net/http"
+	"strings"
+	"time"
+
+	"golang.org/x/crypto/bcrypt"
+)
+
+type Auth struct {
+	PasswordHash string `json:"password_hash"`
+	Privilege    string `json:"privilege"`
+}
+
+const privilegeUser = "user"
+
+// validateAlias checks if an alias meets format requirements.
+func validateAlias(alias string) bool {
+	if len(alias) < 3 || len(alias) > 64 {
+		return false
+	}
+	for _, r := range alias {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case r == '_' || r == '-':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// IsAliasAvailable returns true if the alias is not taken.
+func (app *App) IsAliasAvailable(ctx context.Context, alias string) (bool, error) {
+	var exists bool
+	err := app.Driver.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM auth WHERE key = $1)`, alias).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("check alias existence: %w", err)
+	}
+	return !exists, nil
+}
+
+// CreateUser hashes the password and inserts a new user into the auth table.
+func (app *App) CreateUser(ctx context.Context, alias, password string) (*Auth, error) {
+	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, fmt.Errorf("hash password: %w", err)
+	}
+	auth := &Auth{
+		PasswordHash: string(hashed),
+		Privilege:    privilegeUser,
+	}
+	data, err := json.Marshal(auth)
+	if err != nil {
+		return nil, fmt.Errorf("marshal auth data: %w", err)
+	}
+	_, err = app.Driver.ExecContext(ctx, `INSERT INTO auth (key, value) VALUES ($1, $2)`, alias, data)
+	if err != nil {
+		return nil, fmt.Errorf("insert user record: %w", err)
+	}
+	return auth, nil
+}
+
+// VerifyCredentials validates alias/password and returns the user auth data on success.
+func (app *App) VerifyCredentials(ctx context.Context, alias, password string) (*Auth, error) {
+	var data []byte
+	err := app.Driver.QueryRowContext(ctx, `SELECT value FROM auth WHERE key = $1`, alias).Scan(&data)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errors.New("invalid alias or password")
+		}
+		return nil, fmt.Errorf("lookup user: %w", err)
+	}
+	var auth Auth
+	if err := json.Unmarshal(data, &auth); err != nil {
+		return nil, fmt.Errorf("corrupt auth data for alias %q", alias)
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(auth.PasswordHash), []byte(password)); err != nil {
+		return nil, errors.New("invalid alias or password")
+	}
+	return &auth, nil
+}
+
+// ———————— HTTP Handlers ————————
+
+func (app *App) Register(w http.ResponseWriter, r *http.Request) {
+	alias := strings.TrimSpace(r.FormValue("alias"))
+	password := r.FormValue("password")
+	if !validateAlias(alias) || password == "" {
+		http.Error(w, "Invalid alias or password", http.StatusBadRequest)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	available, err := app.IsAliasAvailable(ctx, alias)
+	if err != nil {
+		log.Printf("Registration DB error: %v", err)
+		http.Error(w, "Registration unavailable", http.StatusInternalServerError)
+		return
+	}
+	if !available {
+		http.Error(w, "Alias already taken", http.StatusConflict)
+		return
+	}
+	auth, err := app.CreateUser(ctx, alias, password)
+	if err != nil {
+		log.Printf("Failed to create user %q: %v", alias, err)
+		http.Error(w, "Registration unavailable", http.StatusInternalServerError)
+		return
+	}
+	if err := app.SetSession(w, r, alias, auth.Privilege); err != nil {
+		log.Printf("Session setup failed for %q: %v", alias, err)
+		http.Error(w, "Login failed", http.StatusInternalServerError)
+		return
+	}
+}
+
+func (app *App) Login(w http.ResponseWriter, r *http.Request) {
+	alias := strings.TrimSpace(r.FormValue("alias"))
+	password := r.FormValue("password")
+	if alias == "" || password == "" {
+		http.Error(w, "Missing credentials", http.StatusBadRequest)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	auth, err := app.VerifyCredentials(ctx, alias, password)
+	if err != nil {
+		log.Printf("Login failed for %q: %v", alias, err)
+		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		return
+	}
+	if err := app.SetSession(w, r, alias, auth.Privilege); err != nil {
+		log.Printf("Session setup failed for %q: %v", alias, err)
+		http.Error(w, "Login failed", http.StatusInternalServerError)
+		return
+	}
+}
+
+func (app *App) Logout(w http.ResponseWriter, r *http.Request) {
+	if err := app.ClearSession(w, r); err != nil {
+		log.Printf("Session clear error: %v", err)
+		// Proceed anyway — user should be logged out from perspective
+	}
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+===== db.go =====
+package frame
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"regexp"
+	"strings"
+)
+
+var validTableNameRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+
+func IsValidTableName(name string) bool {
+	return validTableNameRegex.MatchString(name)
+}
+
+func (app *App) PrepareTables(ctx context.Context) error {
+	const queryTemplate = `
+		CREATE TABLE IF NOT EXISTS %s (
+			id BIGSERIAL PRIMARY KEY,
+			key TEXT UNIQUE NOT NULL,
+			value JSONB
+		)`
+	tables := []string{"auth"}
+	for _, r := range app.Routes {
+		if r.Table == "" || strings.HasPrefix(r.Table, "$") {
+			continue
+		}
+		tables = append(tables, r.Table)
+	}
+	for _, table := range tables {
+		if !IsValidTableName(table) {
+			return fmt.Errorf("invalid table name: %q", table)
+		}
+		query := fmt.Sprintf(queryTemplate, table)
+		if _, err := app.Driver.ExecContext(ctx, query); err != nil {
+			return fmt.Errorf("create table %q: %w", table, err)
+		}
+	}
+	return nil
+}
+
+func (app *App) GetRow(ctx context.Context, table, key string) (map[string]interface{}, error) {
+	if !IsValidTableName(table) {
+		return nil, fmt.Errorf("invalid table name: %q", table)
+	}
+	var value []byte
+	query := fmt.Sprintf(`SELECT value FROM %s WHERE key = $1`, table)
+	err := app.Driver.QueryRowContext(ctx, query, key).Scan(&value)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("row not found in %q with key %q", table, key)
+		}
+		return nil, fmt.Errorf("query row in %q: %w", table, err)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal(value, &result); err != nil {
+		return nil, fmt.Errorf("unmarshal JSON from %q (key=%q): %w", table, key, err)
+	}
+	return result, nil
+}
+
+func (app *App) GetRows(ctx context.Context, table string) ([]map[string]interface{}, error) {
+	if !IsValidTableName(table) {
+		return nil, fmt.Errorf("invalid table name: %q", table)
+	}
+	query := fmt.Sprintf(`SELECT value FROM %s`, table)
+	rows, err := app.Driver.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("query table %q: %w", table, err)
+	}
+	defer rows.Close()
+	var results []map[string]interface{}
+	for rows.Next() {
+		var value []byte
+		if err := rows.Scan(&value); err != nil {
+			return nil, fmt.Errorf("scan row in %q: %w", table, err)
+		}
+		var entry map[string]interface{}
+		if err := json.Unmarshal(value, &entry); err != nil {
+			return nil, fmt.Errorf("unmarshal row in %q: %w", table, err)
+		}
+		results = append(results, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("row iteration error in %q: %w", table, err)
+	}
+	return results, nil
+}
+
+func (app *App) InsertRow(ctx context.Context, table, key string, value interface{}) error {
+	if !IsValidTableName(table) {
+		return fmt.Errorf("invalid table name: %q", table)
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("marshal value for %q/%q: %w", table, key, err)
+	}
+	query := fmt.Sprintf(`
+		INSERT INTO %s (key, value)
+		VALUES ($1, $2)
+		ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+		table)
+
+	if _, err := app.Driver.ExecContext(ctx, query, key, data); err != nil {
+		return fmt.Errorf("upsert into %q (key=%q): %w", table, key, err)
+	}
+	return nil
+}
+===== frame.go =====
+package frame
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"html/template"
+	"log"
+	"net/http"
+	"os"
+	"strings"
+
+	"github.com/gorilla/csrf"
+	"github.com/gorilla/handlers"
+	"github.com/gorilla/sessions"
+	"github.com/joncody/wsrooms"
+	_ "github.com/lib/pq"
+)
+
+// DBConfig holds database connection info.
+type DBConfig struct {
+	User     string `json:"user"`
+	Password string `json:"password"`
+	Name     string `json:"name"`
+}
+
+const (
+	MinHashKeyLen  = 32
+	MinBlockKeyLen = 32
+)
+
+type AppConfig struct {
+	Name     string   `json:"name"`
+	HashKey  string   `json:"hashkey"`
+	BlockKey string   `json:"blockkey"`
+	CSRFKey  string   `json:"csrfkey"`
+	Port     string   `json:"port"`
+	SSLPort  string   `json:"sslport"`
+	Database DBConfig `json:"database"`
+	Routes   []Route  `json:"routes"`
+}
+
+type App struct {
+	AppConfig
+	SessionStore   sessions.Store
+	Templates      *template.Template
+	Driver         *sql.DB
+	Added          []AddedRoute
+	CompiledRoutes []CompiledRoute
+	Router         http.Handler
+}
+
+func logFatalIfErr(err error) {
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Fatal(err)
+	}
+}
+
+func (app *App) Start() error {
+	// Build DB connection string
+	dbstring := fmt.Sprintf(
+		"user=%s password=%s dbname=%s sslmode=disable",
+		app.AppConfig.Database.User, app.AppConfig.Database.Password, app.AppConfig.Database.Name,
+	)
+	// Open DB
+	db, err := sql.Open("postgres", dbstring)
+	if err != nil {
+		return fmt.Errorf("open DB: %w", err)
+	}
+	app.Driver = db
+	// Ping DB to ensure connectivity
+	ctx := context.Background()
+	if err := db.PingContext(ctx); err != nil {
+		db.Close()
+		return fmt.Errorf("ping DB: %w", err)
+	}
+	// Prepare tables
+	if err := app.PrepareTables(ctx); err != nil {
+		db.Close()
+		return fmt.Errorf("prepare tables: %w", err)
+	}
+	if app.AppConfig.SSLPort != "" && app.AppConfig.SSLPort != "0" {
+		go func() {
+			addr := ":" + app.AppConfig.SSLPort
+			log.Printf("Starting HTTPs server on %s", addr)
+			if err := http.ListenAndServeTLS(addr, "server.crt", "server.key", app.Router); err != nil {
+				logFatalIfErr(fmt.Errorf("HTTPS server failed on %s: %w", addr, err))
+			}
+		}()
+	}
+	addr := ":" + app.AppConfig.Port
+	log.Printf("Starting HTTP server on %s", addr)
+	if err := http.ListenAndServe(addr, app.Router); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return fmt.Errorf("HTTP server failed: %w", err)
+	}
+	return nil
+}
+
+func (app *App) Close() error {
+	if app.Driver != nil {
+		return app.Driver.Close()
+	}
+	return nil
+}
+
+func NewApp(configPath string) (*App, error) {
+	app := &App{
+		AppConfig: AppConfig{
+			Name:    "frame",
+			Port:    "8080",
+			SSLPort: "0",
+			Database: DBConfig{
+				User:     "dbuser",
+				Password: "dbpass",
+				Name:     "dbname",
+			},
+		},
+	}
+	if configPath != "" {
+		data, err := os.ReadFile(configPath)
+		if err != nil {
+			return nil, fmt.Errorf("read config %q: %w", configPath, err)
+		}
+		var cfg AppConfig
+		if err := json.Unmarshal(data, &cfg); err != nil {
+			return nil, fmt.Errorf("parse config: %w", err)
+		}
+		app.AppConfig = cfg
+	}
+	if len(app.AppConfig.CSRFKey) < 32 {
+		return nil, fmt.Errorf("csrfkey must be >=32 bytes")
+	}
+	// Setup session store
+	secure := app.AppConfig.SSLPort != "" && app.AppConfig.SSLPort != "0"
+	store, err := NewSessionStore(app.AppConfig.Name, app.AppConfig.HashKey, app.AppConfig.BlockKey, secure)
+	if err != nil {
+		return nil, fmt.Errorf("session store: %w", err)
+	}
+	app.SessionStore = store
+	// Parse templates
+	app.Templates, err = template.New("").Funcs(TemplateFuncs).ParseGlob("./static/views/*")
+	if err != nil {
+		return nil, fmt.Errorf("parse templates: %w", err)
+	}
+	// Setup routes
+	router, err := app.SetupRoutes()
+	if err != nil {
+		return nil, fmt.Errorf("setup routes: %w", err)
+	}
+	CSRFMiddleware := csrf.Protect(
+		[]byte(app.AppConfig.CSRFKey),
+        csrf.CookieName("frame_csrf"),
+		csrf.Secure(secure),
+		csrf.HttpOnly(true),
+		csrf.Path("/"),
+		csrf.SameSite(csrf.SameSiteLaxMode),
+		csrf.RequestHeader("X-CSRF-Token"),
+		csrf.ErrorHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            log.Printf("CSRF Failure: %v", csrf.FailureReason(r))
+            log.Printf("  Expected Origin for Host: %s", r.Host)
+            log.Printf("  Actual Origin Header: %s", r.Header.Get("Origin"))
+            http.Error(w, "CSRF token invalid", http.StatusForbidden)
+		})),
+	)
+	router.Use(CSRFMiddleware)
+	CORSMiddleware := handlers.CORS(
+		handlers.AllowCredentials(),
+		handlers.AllowedOriginValidator(
+			func(origin string) bool {
+				return strings.HasPrefix(origin, "http://localhost")
+			},
+		),
+		handlers.AllowedHeaders([]string{"X-CSRF-Token"}),
+		handlers.ExposedHeaders([]string{"X-CSRF-Token"}),
+	)
+	app.Router = CORSMiddleware(router)
+	// WebSocket event
+	wsrooms.Emitter.On("request", app.ProcessRequest)
+	return app, nil
+}
+===== routes.go =====
+package frame
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha1"
+	"encoding/json"
+	"fmt"
+	"html/template"
+	"log"
+	"net/http"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/gorilla/csrf"
+	"github.com/gorilla/mux"
+	"github.com/joncody/wsrooms"
+)
+
+type RouteConfig struct {
+	Table       string `json:"table"`
+	Key         string `json:"key"`
+	Template    string `json:"template"`
+	Controllers string `json:"controllers"`
+	Privilege   string `json:"privilege,omitempty"`
+}
+
+type Route struct {
+	Route      string      `json:"route"`
+	Admin      RouteConfig `json:"admin"`
+	Authorized RouteConfig `json:"authorized"`
+	RouteConfig
+}
+
+type AddedRoute struct {
+	Pattern *regexp.Regexp
+	Handler func(app *App, c *wsrooms.Conn, msg *wsrooms.Message, matches []string)
+}
+
+type CompiledRoute struct {
+	Pattern *regexp.Regexp
+	Config  Route
+}
+
+type RoutePayload struct {
+	Template    string   `json:"template"`
+	Controllers []string `json:"controllers"`
+}
+
+var (
+	keyCleanRegex = regexp.MustCompile(`[^a-z0-9_\-\s]+`)
+	reservedPath  = regexp.MustCompile(`^/(ws|login|register|logout|static/|favicon\.ico)`)
+)
+
+func ToKey(s string) string {
+	s = strings.ToLower(s)
+	s = keyCleanRegex.ReplaceAllString(s, "")
+	s = strings.Replace(s, " - ", "_-_", -1)
+	s = strings.Replace(s, " ", "-", -1)
+	return strings.Trim(s, "-")
+}
+
+func FromKey(s string) string {
+	s = strings.Replace(s, "-", " ", -1)
+	s = strings.Replace(s, "_ _", " - ", -1)
+	return strings.Title(s)
+}
+
+var TemplateFuncs = template.FuncMap{
+	"unescaped": func(x string) interface{} { return template.HTML(x) },
+	"sha1sum":   func(x string) string { return fmt.Sprintf("%x", sha1.Sum([]byte(x))) },
+	"subtract":  func(a, b int) int { return a - b },
+	"add":       func(a, b int) int { return a + b },
+	"multiply":  func(a, b int) int { return a * b },
+	"divide":    func(a, b int) int { return a / b },
+	"usd":       func(x int) string { return fmt.Sprintf("$%.2f", float64(x)/100) },
+	"css":       func(s string) template.CSS { return template.CSS(s) },
+	"tokey":     ToKey,
+	"fromkey":   FromKey,
+}
+
+func (app *App) CompileRoutes() error {
+	compiled := make([]CompiledRoute, 0, len(app.Routes))
+	for _, r := range app.Routes {
+		patternStr := r.Route
+		if !strings.HasPrefix(patternStr, "^") {
+			patternStr = "^" + patternStr
+		}
+		if !strings.HasSuffix(patternStr, "$") {
+			patternStr += "$"
+		}
+		re, err := regexp.Compile(patternStr)
+		if err != nil {
+			return fmt.Errorf("invalid route pattern %q: %w", r.Route, err)
+		}
+		compiled = append(compiled, CompiledRoute{
+			Pattern: re,
+			Config:  r,
+		})
+	}
+	app.CompiledRoutes = compiled
+	return nil
+}
+
+func (app *App) SetupRoutes() (*mux.Router, error) {
+	router := mux.NewRouter().StrictSlash(false)
+	router.HandleFunc("/login", app.Login).Methods("POST")
+	router.HandleFunc("/register", app.Register).Methods("POST")
+	router.HandleFunc("/logout", app.Logout).Methods("POST")
+	router.HandleFunc("/ws", wsrooms.SocketHandler(app.GetSessionValues)).Methods("GET")
+	router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("./static/"))))
+	router.PathPrefix("/").HandlerFunc(app.baseHandler).Methods("GET")
+	if err := app.CompileRoutes(); err != nil {
+		return nil, fmt.Errorf("compile routes: %w", err)
+	}
+	return router, nil
+}
+
+func (app *App) AddRoute(pattern string, handler func(app *App, c *wsrooms.Conn, msg *wsrooms.Message, matches []string)) error {
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return fmt.Errorf("invalid route pattern %q: %w", pattern, err)
+	}
+	app.Added = append(app.Added, AddedRoute{
+		Pattern: re,
+		Handler: handler,
+	})
+	return nil
+}
+
+func (app *App) baseHandler(w http.ResponseWriter, r *http.Request) {
+	if reservedPath.MatchString(r.URL.Path) {
+		http.NotFound(w, r)
+		return
+	}
+	csrfToken := csrf.Token(r)
+    data := map[string]string{
+        "csrfToken": csrfToken,
+    }
+    // Render the template
+	if err := app.Templates.ExecuteTemplate(w, "base", data); err != nil {
+		log.Printf("Template error in baseHandler: %v", err)
+		http.Error(w, "Render failed", http.StatusInternalServerError)
+	}
+}
+
+func (app *App) Render(c *wsrooms.Conn, msg *wsrooms.Message, tmpl string, controllers []string, data interface{}) {
+	var buf bytes.Buffer
+	if err := app.Templates.ExecuteTemplate(&buf, tmpl, data); err != nil {
+		log.Printf("Render error (%s): %v", tmpl, err)
+		return
+	}
+	cleanCtrls := make([]string, 0, len(controllers))
+	for _, ctrl := range controllers {
+		if trimmed := strings.TrimSpace(ctrl); trimmed != "" {
+			cleanCtrls = append(cleanCtrls, trimmed)
+		}
+	}
+	resp := RoutePayload{
+		Template:    buf.String(),
+		Controllers: cleanCtrls,
+	}
+	payload, err := json.Marshal(resp)
+	if err != nil {
+		log.Printf("JSON marshal error: %v", err)
+		return
+	}
+	msg.Event = "response"
+	msg.EventLength = len(msg.Event)
+	msg.Payload = payload
+	msg.PayloadLength = len(payload)
+	c.Send <- msg.Bytes()
+}
+
+func resolveDynamic(field string, subs []string) string {
+	if !strings.HasPrefix(field, "$") {
+		return field
+	}
+	if n, err := strconv.Atoi(field[1:]); err == nil && n >= 0 && n < len(subs) {
+		return subs[n]
+	}
+	return ""
+}
+
+func (app *App) matchAddedRoute(c *wsrooms.Conn, msg *wsrooms.Message, path string) bool {
+	for _, added := range app.Added {
+		if subs := added.Pattern.FindStringSubmatch(path); subs != nil {
+			added.Handler(app, c, msg, subs)
+			return true
+		}
+	}
+	return false
+}
+
+func (app *App) MatchCompiledRoute(path string) (*CompiledRoute, []string) {
+	for _, cr := range app.CompiledRoutes {
+		if subs := cr.Pattern.FindStringSubmatch(path); subs != nil {
+			return &cr, subs
+		}
+	}
+	return nil, nil
+}
+
+func SelectRouteConfig(route Route, privilege string) RouteConfig {
+	// Admin override
+	if privilege == "admin" &&
+		(route.Admin.Template != "" || route.Admin.Controllers != "") {
+		return route.Admin
+	}
+	// Authorized users
+	if privilege != "" && route.Authorized.Privilege != "" {
+		for _, allowed := range strings.Split(route.Authorized.Privilege, ",") {
+			if strings.TrimSpace(allowed) == privilege {
+				return route.Authorized
+			}
+		}
+	}
+	// Default
+	return route.RouteConfig
+}
+
+func (app *App) ResolveRouteData(ctx context.Context, cfg RouteConfig, subs []string) (interface{}, error) {
+	table := resolveDynamic(cfg.Table, subs)
+	key := resolveDynamic(cfg.Key, subs)
+	if table == "" {
+		return nil, nil
+	}
+	if !IsValidTableName(table) {
+		return nil, fmt.Errorf("invalid table name: %q", table)
+	}
+	if key != "" {
+		return app.GetRow(ctx, table, key)
+	}
+	return app.GetRows(ctx, table)
+}
+
+func (app *App) ProcessRequest(c *wsrooms.Conn, msg *wsrooms.Message) {
+	path := string(msg.Payload)
+	// 1. Added routes (custom handlers)
+	if app.matchAddedRoute(c, msg, path) {
+		return
+	}
+	// 2. Match configured routes
+	cr, subs := app.MatchCompiledRoute(path)
+	if cr == nil {
+		log.Printf("No route matched: %s", path)
+		return
+	}
+	// 3. Select route config by privilege
+	privilege := c.Cookie["privilege"]
+	cfg := SelectRouteConfig(cr.Config, privilege)
+	// 4. Load data (if any)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	data, err := app.ResolveRouteData(ctx, cfg, subs)
+	if err != nil {
+		log.Printf("Route data error (%s): %v", path, err)
+		return
+	}
+	// 5. Render response
+	controllers := strings.Split(cfg.Controllers, ",")
+	app.Render(c, msg, cfg.Template, controllers, data)
+}
+===== session.go =====
+package frame
+
+import (
+	"fmt"
+	"net/http"
+	"time"
+
+	"github.com/gorilla/sessions"
+)
+
+const sessionTTL = 24 * time.Hour
+
+func NewSessionStore(name, hashKey, blockKey string, secure bool) (sessions.Store, error) {
+	if len(hashKey) < 32 {
+		return nil, fmt.Errorf("hash key must be at least 32 bytes (got %d)", len(hashKey))
+	}
+	if len(blockKey) < 32 {
+		return nil, fmt.Errorf("block key must be at least 32 bytes (got %d)", len(blockKey))
+	}
+	store := sessions.NewCookieStore([]byte(hashKey), []byte(blockKey))
+	store.Options = &sessions.Options{
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(sessionTTL.Seconds()),
+		Path:     "/",
+	}
+	return store, nil
+}
+
+func (app *App) GetSessionValues(r *http.Request) (map[string]string, error) {
+	session, err := app.SessionStore.Get(r, app.Name)
+	if err != nil {
+		return nil, err
+	}
+	values := make(map[string]string)
+	if alias, ok := session.Values["alias"].(string); ok && alias != "" {
+		values["alias"] = alias
+	}
+	if priv, ok := session.Values["privilege"].(string); ok && priv != "" {
+		values["privilege"] = priv
+	}
+	return values, nil
+}
+
+func (app *App) SetSession(w http.ResponseWriter, r *http.Request, alias, privilege string) error {
+	session, err := app.SessionStore.Get(r, app.Name)
+	if err != nil {
+		return err
+	}
+	session.Values["alias"] = alias
+	session.Values["privilege"] = privilege
+	return session.Save(r, w)
+}
+
+func (app *App) ClearSession(w http.ResponseWriter, r *http.Request) error {
+	session, err := app.SessionStore.Get(r, app.Name)
+	if err != nil {
+		return err
+	}
+	session.Options.MaxAge = -1
+	return session.Save(r, w)
+}

@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/joncody/wsrooms"
 	"github.com/gorilla/mux"
+	"github.com/joncody/wsrooms"
 )
 
 type RouteConfig struct {
@@ -104,7 +104,7 @@ func (app *App) CompileRoutes() error {
 }
 
 func (app *App) SetupRoutes() (*mux.Router, error) {
-	router := mux.NewRouter().StrictSlash(false);
+	router := mux.NewRouter().StrictSlash(false)
 	router.HandleFunc("/login", app.Login).Methods("POST")
 	router.HandleFunc("/register", app.Register).Methods("POST")
 	router.HandleFunc("/logout", app.Logout).Methods("POST")
@@ -114,7 +114,7 @@ func (app *App) SetupRoutes() (*mux.Router, error) {
 	if err := app.CompileRoutes(); err != nil {
 		return nil, fmt.Errorf("compile routes: %w", err)
 	}
-    return router, nil
+	return router, nil
 }
 
 func (app *App) AddRoute(pattern string, handler func(app *App, c *wsrooms.Conn, msg *wsrooms.Message, matches []string)) error {
@@ -134,11 +134,9 @@ func (app *App) baseHandler(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	cook, err := app.GetSessionValues(r)
-	if err != nil {
-		cook = nil
-	}
-	if err := app.Templates.ExecuteTemplate(w, "base", cook); err != nil {
+    data, _ := app.GetSessionValues(r)
+    // Render the template
+	if err := app.Templates.ExecuteTemplate(w, "base", data); err != nil {
 		log.Printf("Template error in baseHandler: %v", err)
 		http.Error(w, "Render failed", http.StatusInternalServerError)
 	}

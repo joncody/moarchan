@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
 	"github.com/joncody/wsrooms"
 	_ "github.com/lib/pq"
@@ -33,6 +32,7 @@ type AppConfig struct {
 	Name     string   `json:"name"`
 	HashKey  string   `json:"hashkey"`
 	BlockKey string   `json:"blockkey"`
+	CSRFKey  string   `json:"csrfkey"`
 	Port     string   `json:"port"`
 	SSLPort  string   `json:"sslport"`
 	Database DBConfig `json:"database"`
@@ -46,7 +46,7 @@ type App struct {
 	Driver         *sql.DB
 	Added          []AddedRoute
 	CompiledRoutes []CompiledRoute
-	Router         *mux.Router
+	Router         http.Handler
 }
 
 func logFatalIfErr(err error) {
@@ -139,7 +139,7 @@ func NewApp(configPath string) (*App, error) {
 		return nil, fmt.Errorf("parse templates: %w", err)
 	}
 	// Setup routes
-    app.Router, err = app.SetupRoutes()
+	app.Router, err = app.SetupRoutes()
 	if err != nil {
 		return nil, fmt.Errorf("setup routes: %w", err)
 	}
