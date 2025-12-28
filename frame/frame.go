@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
 	"github.com/joncody/wsrooms"
 	_ "github.com/lib/pq"
@@ -45,7 +46,7 @@ type App struct {
 	Driver         *sql.DB
 	Added          []AddedRoute
 	CompiledRoutes []CompiledRoute
-	Router         http.Handler
+	Router         *mux.Router
 }
 
 func logFatalIfErr(err error) {
