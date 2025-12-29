@@ -134,8 +134,8 @@ func (app *App) baseHandler(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-    data, _ := app.GetSessionValues(r)
-    // Render the template
+	data, _ := app.GetSessionValues(r)
+	// Render the template
 	if err := app.Templates.ExecuteTemplate(w, "base", data); err != nil {
 		log.Printf("Template error in baseHandler: %v", err)
 		http.Error(w, "Render failed", http.StatusInternalServerError)
@@ -241,7 +241,7 @@ func (app *App) ProcessRequest(c *wsrooms.Conn, msg *wsrooms.Message) error {
 	// 2. Match configured routes
 	cr, subs := app.MatchCompiledRoute(path)
 	if cr == nil {
-        return fmt.Errorf("No route matched: %s", path)
+		return fmt.Errorf("No route matched: %s", path)
 	}
 	// 3. Select route config by privilege
 	privilege := c.Claims["privilege"]
@@ -256,5 +256,5 @@ func (app *App) ProcessRequest(c *wsrooms.Conn, msg *wsrooms.Message) error {
 	// 5. Render response
 	controllers := strings.Split(cfg.Controllers, ",")
 	app.Render(c, msg, cfg.Template, controllers, data)
-    return nil
+	return nil
 }
