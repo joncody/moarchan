@@ -167,7 +167,7 @@ func (app *App) Render(c *wsrooms.Conn, msg *wsrooms.Message, tmpl string, contr
 	msg.EventLength = len(msg.Event)
 	msg.Payload = payload
 	msg.PayloadLength = len(payload)
-	c.Send <- msg.Bytes()
+    c.SendToClient(c.ID, "response", payload)
 }
 
 func resolveDynamic(field string, subs []string) string {

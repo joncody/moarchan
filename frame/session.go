@@ -2,7 +2,6 @@ package frame
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 
@@ -41,7 +40,6 @@ func (app *App) GetSessionValues(r *http.Request) (map[string]string, error) {
 	if priv, ok := session.Values["privilege"].(string); ok && priv != "" {
 		values["privilege"] = priv
 	}
-	log.Println(values)
 	return values, nil
 }
 

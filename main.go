@@ -107,9 +107,8 @@ func (u *Unique) Generate() {
 }
 
 func SendMessage(conn *wsrooms.Conn, msg *wsrooms.Message) {
-	bmsg := msg.Bytes()
 	conn.SendToRoom(msg.Room, msg.Event, msg.Payload)
-	conn.Send <- bmsg
+	conn.TrySend(msg.Bytes())
 }
 
 func threadHandler(conn *wsrooms.Conn, msg *wsrooms.Message) error {
@@ -134,7 +133,7 @@ func threadHandler(conn *wsrooms.Conn, msg *wsrooms.Message) error {
 		log.Println(err)
 		return err
 	}
-	response := wsrooms.ConstructMessage(thread.Topic, "new-thread", "", conn.ID, payload)
+	response := wsrooms.NewMessage(thread.Topic, "new-thread", "", conn.ID, payload)
 	SendMessage(conn, response)
 	return nil
 }
@@ -201,7 +200,7 @@ func replyHandler(conn *wsrooms.Conn, msg *wsrooms.Message) error {
 		log.Println(err)
 		return err
 	}
-	response := wsrooms.ConstructMessage(reply.Topic, "new-reply", "", conn.ID, payload)
+	response := wsrooms.NewMessage(reply.Topic, "new-reply", "", conn.ID, payload)
 	SendMessage(conn, response)
 	return nil
 }
