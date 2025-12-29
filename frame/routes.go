@@ -232,20 +232,19 @@ func (app *App) ResolveRouteData(ctx context.Context, cfg RouteConfig, subs []st
 	return app.GetRows(ctx, table)
 }
 
-func (app *App) ProcessRequest(c *wsrooms.Conn, msg *wsrooms.Message) {
+func (app *App) ProcessRequest(c *wsrooms.Conn, msg *wsrooms.Message) error {
 	path := string(msg.Payload)
 	// 1. Added routes (custom handlers)
 	if app.matchAddedRoute(c, msg, path) {
-		return
+		return nil
 	}
 	// 2. Match configured routes
 	cr, subs := app.MatchCompiledRoute(path)
 	if cr == nil {
-		log.Printf("No route matched: %s", path)
-		return
+        return fmt.Errorf("No route matched: %s", path)
 	}
 	// 3. Select route config by privilege
-	privilege := c.Cookie["privilege"]
+	privilege := c.Claims["privilege"]
 	cfg := SelectRouteConfig(cr.Config, privilege)
 	// 4. Load data (if any)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -253,9 +252,9 @@ func (app *App) ProcessRequest(c *wsrooms.Conn, msg *wsrooms.Message) {
 	data, err := app.ResolveRouteData(ctx, cfg, subs)
 	if err != nil {
 		log.Printf("Route data error (%s): %v", path, err)
-		return
 	}
 	// 5. Render response
 	controllers := strings.Split(cfg.Controllers, ",")
 	app.Render(c, msg, cfg.Template, controllers, data)
+    return nil
 }

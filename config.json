@@ -1,8 +1,8 @@
 {
-    "port": "8080",
+    "name": "moarchan",
+    "port": "9001",
     "hashkey": "12345678901234567890123456789012",
     "blockkey": "abcdefghijklmnopqrstuvwx12345678",
-    "cookiename": "moarchan",
     "database": {
         "user": "moarchan",
         "password": "moarchan",

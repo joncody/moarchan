@@ -60,13 +60,6 @@ global.addEventListener("hashchange", function () {
         app.retries += 1;
     });
 
-    app.socket.on("error", function (err) {
-        console.log(err);
-        if (app.retries < 10) {
-            global.setTimeout(init, 3000);
-        }
-    });
-
     app.socket.on("response", function (payload) {
         const msg = JSON.parse(decoder.decode(payload));
 

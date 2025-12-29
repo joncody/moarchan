@@ -108,16 +108,16 @@ func (u *Unique) Generate() {
 
 func SendMessage(conn *wsrooms.Conn, msg *wsrooms.Message) {
 	bmsg := msg.Bytes()
-	conn.Emit(msg)
+    conn.SendToRoom(msg.Room, msg.Event, msg.Payload)
 	conn.Send <- bmsg
 }
 
-func threadHandler(conn *wsrooms.Conn, msg *wsrooms.Message) {
+func threadHandler(conn *wsrooms.Conn, msg *wsrooms.Message) error {
 	var thread Thread
 	err := json.Unmarshal(msg.Payload, &thread)
 	if err != nil {
 		log.Println(err)
-		return
+		return err
 	}
 	thread.Unique.Generate()
 	thread.FileInfo.Process()
@@ -128,22 +128,23 @@ func threadHandler(conn *wsrooms.Conn, msg *wsrooms.Message) {
 	payload, err := json.Marshal(&thread)
 	if err != nil {
 		log.Println(err)
-		return
+		return err
 	}
 	if err := app.InsertRow(ctx, thread.Topic, thread.Unique.Hash, string(payload)); err != nil {
 		log.Println(err)
-		return
+		return err
 	}
 	response := wsrooms.ConstructMessage(thread.Topic, "new-thread", "", conn.ID, payload)
 	SendMessage(conn, response)
+    return nil
 }
 
-func replyHandler(conn *wsrooms.Conn, msg *wsrooms.Message) {
+func replyHandler(conn *wsrooms.Conn, msg *wsrooms.Message) error {
 	var reply Reply
 	err := json.Unmarshal(msg.Payload, &reply)
 	if err != nil {
 		log.Println(err)
-		return
+		return err
 	}
 	reply.Unique.Generate()
 	reply.FileInfo.Process()
@@ -153,19 +154,19 @@ func replyHandler(conn *wsrooms.Conn, msg *wsrooms.Message) {
 	obj, err := app.GetRow(ctx, reply.Topic, reply.Thread)
 	if err != nil {
 		log.Println(err)
-		return
+		return err
 	}
 	// Convert to Thread
 	var thread Thread
 	dataobj, err := json.Marshal(obj)
 	if err != nil {
 		log.Println(err)
-		return
+		return err
 	}
 	err = json.Unmarshal(dataobj, &thread)
 	if err != nil {
 		log.Println(err)
-		return
+		return err
 	}
 	// Initialize Replies if nil
 	if thread.Replies == nil {
@@ -188,20 +189,21 @@ func replyHandler(conn *wsrooms.Conn, msg *wsrooms.Message) {
 	thr, err := json.Marshal(&thread)
 	if err != nil {
 		log.Println(err)
-		return
+		return err
 	}
 	if err := app.InsertRow(ctx, reply.Topic, reply.Thread, string(thr)); err != nil {
 		log.Println(err)
-		return
+		return err
 	}
 	// Send reply response
 	payload, err := json.Marshal(&reply)
 	if err != nil {
 		log.Println(err)
-		return
+		return err
 	}
 	response := wsrooms.ConstructMessage(reply.Topic, "new-reply", "", conn.ID, payload)
 	SendMessage(conn, response)
+    return nil
 }
 
 func main() {
@@ -210,7 +212,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	wsrooms.Emitter.On("new-thread", threadHandler)
-	wsrooms.Emitter.On("new-reply", replyHandler)
+	if err := wsrooms.RegisterHandler("new-thread", threadHandler); err != nil {
+		log.Fatal("Failed to register handler:", err)
+	}
+	if err := wsrooms.RegisterHandler("new-reply", replyHandler); err != nil {
+		log.Fatal("Failed to register handler:", err)
+	}
 	app.Start()
 }

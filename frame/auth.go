@@ -147,7 +147,7 @@ func (app *App) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *App) Logout(w http.ResponseWriter, r *http.Request) {
-	if err := app.ClearSession(w, r); err != nil {
+	if err := app.clearSession(w, r); err != nil {
 		log.Printf("Session clear error: %v", err)
 		// Proceed anyway — user should be logged out from perspective
 	}

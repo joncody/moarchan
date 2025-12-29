@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+    "log"
 
 	"github.com/gorilla/sessions"
 )
@@ -40,6 +41,7 @@ func (app *App) GetSessionValues(r *http.Request) (map[string]string, error) {
 	if priv, ok := session.Values["privilege"].(string); ok && priv != "" {
 		values["privilege"] = priv
 	}
+    log.Println(values)
 	return values, nil
 }
 
@@ -53,7 +55,7 @@ func (app *App) SetSession(w http.ResponseWriter, r *http.Request, alias, privil
 	return session.Save(r, w)
 }
 
-func (app *App) ClearSession(w http.ResponseWriter, r *http.Request) error {
+func (app *App) clearSession(w http.ResponseWriter, r *http.Request) error {
 	session, err := app.SessionStore.Get(r, app.Name)
 	if err != nil {
 		return err

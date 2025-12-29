@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
 	"github.com/joncody/wsrooms"
 	_ "github.com/lib/pq"
@@ -32,7 +33,6 @@ type AppConfig struct {
 	Name     string   `json:"name"`
 	HashKey  string   `json:"hashkey"`
 	BlockKey string   `json:"blockkey"`
-	CSRFKey  string   `json:"csrfkey"`
 	Port     string   `json:"port"`
 	SSLPort  string   `json:"sslport"`
 	Database DBConfig `json:"database"`
@@ -46,7 +46,7 @@ type App struct {
 	Driver         *sql.DB
 	Added          []AddedRoute
 	CompiledRoutes []CompiledRoute
-	Router         http.Handler
+	Router         *mux.Router
 }
 
 func logFatalIfErr(err error) {
@@ -144,6 +144,8 @@ func NewApp(configPath string) (*App, error) {
 		return nil, fmt.Errorf("setup routes: %w", err)
 	}
 	// WebSocket event
-	wsrooms.Emitter.On("request", app.ProcessRequest)
+	if err := wsrooms.RegisterHandler("request", app.ProcessRequest); err != nil {
+		log.Fatal("Failed to register handler:", err)
+	}
 	return app, nil
 }
