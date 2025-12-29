@@ -10,8 +10,8 @@ github.com/gorilla/sessions v1.4.0 h1:kpIYOp/oi6MG/p5PgxApU8srsSw9tuFbt46Lt7auzq
 github.com/gorilla/sessions v1.4.0/go.mod h1:FLWm50oby91+hl7p/wRxDth9bWSuk0qVL2emc7lT5ik=
 github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aNNg=
 github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
-github.com/joncody/wsrooms v0.0.0-20251229214703-a00569a0603a h1:wAs1Gz2oEIrGxjBvCxVqrw9VE3BHoMKnGt3E7CvksMM=
-github.com/joncody/wsrooms v0.0.0-20251229214703-a00569a0603a/go.mod h1:+pzxEvnnMgxP5XOiztFOfOrDQHfR0b6Hn7OOJkMKVd0=
+github.com/joncody/wsrooms v0.0.0-20251229221020-0aacc87ab319 h1:zQ/eQq5SpCGiQA1aSfL2DNbCtLFr4xQQ9ii97mWK8Ak=
+github.com/joncody/wsrooms v0.0.0-20251229221020-0aacc87ab319/go.mod h1:+pzxEvnnMgxP5XOiztFOfOrDQHfR0b6Hn7OOJkMKVd0=
 github.com/lib/pq v1.10.9 h1:YXG7RB+JIjhP29X+OtkiDnYaXQwpS4JEWq7dtCCRUEw=
 github.com/lib/pq v1.10.9/go.mod h1:AlVN5x4E4T544tWzH6hKfbfQvm3HdbOxrmggDNAPY9o=
 github.com/vincent-petithory/dataurl v1.0.0 h1:cXw+kPto8NLuJtlMsI152irrVw9fRDX8AbShPRpg2CI=
