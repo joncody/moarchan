@@ -8,7 +8,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
 	github.com/gorilla/sessions v1.4.0
-	github.com/joncody/wsrooms v0.0.0-20251229221020-0aacc87ab319
+	github.com/joncody/roomer v0.0.0-20251230174026-fe274da8e74e
 	github.com/lib/pq v1.10.9
 	github.com/vincent-petithory/dataurl v1.0.0
 	golang.org/x/crypto v0.46.0

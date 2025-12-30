@@ -1,6 +1,6 @@
 "use strict";
 
-import wsrooms from "./wsrooms.js";
+import roomer from "./roomer.js";
 
 const global = (
     globalThis !== undefined
@@ -37,7 +37,7 @@ global.addEventListener("hashchange", function () {
 });
 
 (function init() {
-    app.socket = wsrooms((
+    app.socket = roomer((
         global.location.protocol === "https:"
         ? "wss:"
         : "ws:"

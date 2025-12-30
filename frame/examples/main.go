@@ -7,11 +7,11 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/joncody/wsrooms"
+	"github.com/joncody/roomer"
 	"moarchan/frame"
 )
 
-func testHandler(app *frame.App, c *wsrooms.Conn, msg *wsrooms.Message, matches []string) {
+func testHandler(app *frame.App, c *roomer.Conn, msg *roomer.Message, matches []string) {
 	log.Printf("Test route matched: %v", matches)
 	app.Render(c, msg, "index-added", []string{"index"}, nil)
 }

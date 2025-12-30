@@ -13,7 +13,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
-	"github.com/joncody/wsrooms"
+	"github.com/joncody/roomer"
 	_ "github.com/lib/pq"
 )
 
@@ -144,7 +144,7 @@ func NewApp(configPath string) (*App, error) {
 		return nil, fmt.Errorf("setup routes: %w", err)
 	}
 	// WebSocket event
-	if err := wsrooms.RegisterHandler("request", app.ProcessRequest); err != nil {
+	if err := roomer.RegisterHandler("request", app.ProcessRequest); err != nil {
 		log.Fatal("Failed to register handler:", err)
 	}
 	return app, nil

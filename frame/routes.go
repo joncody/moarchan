@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/joncody/wsrooms"
+	"github.com/joncody/roomer"
 )
 
 type RouteConfig struct {
@@ -35,7 +35,7 @@ type Route struct {
 
 type AddedRoute struct {
 	Pattern *regexp.Regexp
-	Handler func(app *App, c *wsrooms.Conn, msg *wsrooms.Message, matches []string)
+	Handler func(app *App, c *roomer.Conn, msg *roomer.Message, matches []string)
 }
 
 type CompiledRoute struct {
@@ -108,7 +108,7 @@ func (app *App) SetupRoutes() (*mux.Router, error) {
 	router.HandleFunc("/login", app.Login).Methods("POST")
 	router.HandleFunc("/register", app.Register).Methods("POST")
 	router.HandleFunc("/logout", app.Logout).Methods("POST")
-	router.HandleFunc("/ws", wsrooms.SocketHandler(app.GetSessionValues)).Methods("GET")
+	router.HandleFunc("/ws", roomer.SocketHandler(app.GetSessionValues)).Methods("GET")
 	router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("./static/"))))
 	router.PathPrefix("/").HandlerFunc(app.baseHandler).Methods("GET")
 	if err := app.CompileRoutes(); err != nil {
@@ -117,7 +117,7 @@ func (app *App) SetupRoutes() (*mux.Router, error) {
 	return router, nil
 }
 
-func (app *App) AddRoute(pattern string, handler func(app *App, c *wsrooms.Conn, msg *wsrooms.Message, matches []string)) error {
+func (app *App) AddRoute(pattern string, handler func(app *App, c *roomer.Conn, msg *roomer.Message, matches []string)) error {
 	re, err := regexp.Compile(pattern)
 	if err != nil {
 		return fmt.Errorf("invalid route pattern %q: %w", pattern, err)
@@ -142,7 +142,7 @@ func (app *App) baseHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (app *App) Render(c *wsrooms.Conn, msg *wsrooms.Message, tmpl string, controllers []string, data interface{}) {
+func (app *App) Render(c *roomer.Conn, msg *roomer.Message, tmpl string, controllers []string, data interface{}) {
 	var buf bytes.Buffer
 	if err := app.Templates.ExecuteTemplate(&buf, tmpl, data); err != nil {
 		log.Printf("Render error (%s): %v", tmpl, err)
@@ -180,7 +180,7 @@ func resolveDynamic(field string, subs []string) string {
 	return ""
 }
 
-func (app *App) matchAddedRoute(c *wsrooms.Conn, msg *wsrooms.Message, path string) bool {
+func (app *App) matchAddedRoute(c *roomer.Conn, msg *roomer.Message, path string) bool {
 	for _, added := range app.Added {
 		if subs := added.Pattern.FindStringSubmatch(path); subs != nil {
 			added.Handler(app, c, msg, subs)
@@ -232,7 +232,7 @@ func (app *App) ResolveRouteData(ctx context.Context, cfg RouteConfig, subs []st
 	return app.GetRows(ctx, table)
 }
 
-func (app *App) ProcessRequest(c *wsrooms.Conn, msg *wsrooms.Message) error {
+func (app *App) ProcessRequest(c *roomer.Conn, msg *roomer.Message) error {
 	path := string(msg.Payload)
 	// 1. Added routes (custom handlers)
 	if app.matchAddedRoute(c, msg, path) {

@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/joncody/wsrooms"
+	"github.com/joncody/roomer"
 	"github.com/vincent-petithory/dataurl"
 	"moarchan/frame"
 )
@@ -106,12 +106,12 @@ func (u *Unique) Generate() {
 	u.Hash = fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("%s%s", u.Timestamp, u.Uuid))))[:9]
 }
 
-func SendMessage(conn *wsrooms.Conn, msg *wsrooms.Message) {
+func SendMessage(conn *roomer.Conn, msg *roomer.Message) {
 	conn.SendToRoom(msg.Room, msg.Event, msg.Payload)
 	conn.TrySend(msg.Bytes())
 }
 
-func threadHandler(conn *wsrooms.Conn, msg *wsrooms.Message) error {
+func threadHandler(conn *roomer.Conn, msg *roomer.Message) error {
 	var thread Thread
 	err := json.Unmarshal(msg.Payload, &thread)
 	if err != nil {
@@ -133,12 +133,12 @@ func threadHandler(conn *wsrooms.Conn, msg *wsrooms.Message) error {
 		log.Println(err)
 		return err
 	}
-	response := wsrooms.NewMessage(thread.Topic, "new-thread", "", conn.ID, payload)
+	response := roomer.NewMessage(thread.Topic, "new-thread", "", conn.ID, payload)
 	SendMessage(conn, response)
 	return nil
 }
 
-func replyHandler(conn *wsrooms.Conn, msg *wsrooms.Message) error {
+func replyHandler(conn *roomer.Conn, msg *roomer.Message) error {
 	var reply Reply
 	err := json.Unmarshal(msg.Payload, &reply)
 	if err != nil {
@@ -200,7 +200,7 @@ func replyHandler(conn *wsrooms.Conn, msg *wsrooms.Message) error {
 		log.Println(err)
 		return err
 	}
-	response := wsrooms.NewMessage(reply.Topic, "new-reply", "", conn.ID, payload)
+	response := roomer.NewMessage(reply.Topic, "new-reply", "", conn.ID, payload)
 	SendMessage(conn, response)
 	return nil
 }
@@ -211,10 +211,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err := wsrooms.RegisterHandler("new-thread", threadHandler); err != nil {
+	if err := roomer.RegisterHandler("new-thread", threadHandler); err != nil {
 		log.Fatal("Failed to register handler:", err)
 	}
-	if err := wsrooms.RegisterHandler("new-reply", replyHandler); err != nil {
+	if err := roomer.RegisterHandler("new-reply", replyHandler); err != nil {
 		log.Fatal("Failed to register handler:", err)
 	}
 	app.Start()
