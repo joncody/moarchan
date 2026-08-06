@@ -10,6 +10,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
@@ -81,18 +84,40 @@ func (app *App) Start() error {
 	if app.AppConfig.SSLPort != "" && app.AppConfig.SSLPort != "0" {
 		go func() {
 			addr := ":" + app.AppConfig.SSLPort
-			log.Printf("Starting HTTPs server on %s", addr)
+			log.Printf("Starting HTTPS server on %s", addr)
 			if err := http.ListenAndServeTLS(addr, "server.crt", "server.key", app.Router); err != nil {
 				logFatalIfErr(fmt.Errorf("HTTPS server failed on %s: %w", addr, err))
 			}
 		}()
 	}
+
 	addr := ":" + app.AppConfig.Port
-	log.Printf("Starting HTTP server on %s", addr)
-	if err := http.ListenAndServe(addr, app.Router); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return fmt.Errorf("HTTP server failed: %w", err)
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: app.Router,
 	}
-	return nil
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		log.Printf("Starting HTTP server on %s", addr)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("HTTP server failed: %v", err)
+		}
+	}()
+
+	<-stop
+	log.Println("Shutting down server gracefully...")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("HTTP server shutdown error: %v", err)
+	}
+
+	return app.Close()
 }
 
 func (app *App) Close() error {

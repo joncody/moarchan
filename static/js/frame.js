@@ -8,7 +8,7 @@ const global = (
     : (
         window !== undefined
         ? window
-        : this
+        : globalThis
     )
 );
 
@@ -26,6 +26,14 @@ const app = {
 function changehash(event) {
     global.location.hash = event.currentTarget.dataset.href;
 }
+
+function assignHrefs() {
+    app.hrefs.forEach((el) => el.removeEventListener("click", changehash));
+    app.hrefs = document.querySelectorAll("[data-href]");
+    app.hrefs.forEach((el) => el.addEventListener("click", changehash));
+}
+
+app.assignHrefs = assignHrefs;
 
 global.addEventListener("hashchange", function () {
     const hash = app.hashmatch.exec(global.location.hash)[1];
@@ -64,13 +72,11 @@ global.addEventListener("hashchange", function () {
         const msg = JSON.parse(decoder.decode(payload));
 
         app.base.innerHTML = msg.template;
-        app.hrefs.forEach((el) => el.removeEventListener("click", changehash));
-        app.hrefs = document.querySelectorAll("[data-href]");
-        app.hrefs.forEach((el) => el.addEventListener("click", changehash));
+        assignHrefs();
         if (msg.controllers) {
             msg.controllers.forEach(function (c) {
                 if (app.controllers.hasOwnProperty(c)) {
-                    app.controllers[c](global);
+                    app.controllers[c](global, msg.template);
                 }
             });
         }

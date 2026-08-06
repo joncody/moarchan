@@ -12,6 +12,7 @@ import (
 	"image/png"
 	"log"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -64,23 +65,29 @@ type FileInfo struct {
 	Dimensions string `json:"file_dimensions"`
 }
 
-func (f *FileInfo) Process() {
+func (f *FileInfo) Process() error {
 	var config image.Config
 	if f.File == "" {
-		return
+		return nil
 	}
 	f.Path = fmt.Sprintf("./static/images/uploads/%s", f.Name)
 	fdata, err := dataurl.DecodeString(f.File)
 	if err != nil {
-		log.Println(err)
-		return
+		log.Println("DataURL decode error:", err)
+		return err
 	}
-	os.MkdirAll("./static/images/uploads", 0755)
-	os.WriteFile(f.Path, fdata.Data, 0775)
+	if err := os.MkdirAll("./static/images/uploads", 0755); err != nil {
+		log.Println("MkdirAll error:", err)
+		return err
+	}
+	if err := os.WriteFile(f.Path, fdata.Data, 0644); err != nil {
+		log.Println("WriteFile error:", err)
+		return err
+	}
 	saved, err := os.Open(f.Path)
 	if err != nil {
-		log.Println(err)
-		return
+		log.Println("Open image error:", err)
+		return err
 	}
 	defer saved.Close()
 	if f.Mime == "image/jpeg" {
@@ -90,13 +97,26 @@ func (f *FileInfo) Process() {
 	} else if f.Mime == "image/gif" {
 		config, err = gif.DecodeConfig(saved)
 	}
+	if err != nil {
+		log.Println("DecodeConfig error:", err)
+		return err
+	}
 	f.Dimensions = fmt.Sprintf("%dx%d", config.Width, config.Height)
+	
+	// Convert raw byte count string to KB if needed
+	if f.Size != "" {
+		if b, parseErr := strconv.ParseInt(f.Size, 10, 64); parseErr == nil && b > 0 {
+			f.Size = fmt.Sprintf("%.1f", float64(b)/1024.0)
+		}
+	}
+	
 	f.File = ""
+	return nil
 }
 
 func (u *Unique) Generate() {
 	now := time.Now()
-	u.Timestamp = fmt.Sprintf("%d/%d/%d(%s)%d:%d:%d", now.Month(), now.Day(), now.Year(), now.Weekday().String()[:3], now.Hour(), now.Minute(), now.Second())
+	u.Timestamp = fmt.Sprintf("%d/%d/%d(%s)%02d:%02d:%02d", now.Month(), now.Day(), now.Year(), now.Weekday().String()[:3], now.Hour(), now.Minute(), now.Second())
 	id, err := uuid.NewRandom()
 	if err != nil {
 		log.Println(err)
@@ -118,18 +138,23 @@ func threadHandler(conn *roomer.Conn, msg *roomer.Message) error {
 		log.Println(err)
 		return err
 	}
+	if thread.Topic == "" {
+		return fmt.Errorf("invalid thread payload: missing topic")
+	}
 	thread.Unique.Generate()
-	thread.FileInfo.Process()
+	if err := thread.FileInfo.Process(); err != nil {
+		log.Println("File processing failed:", err)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	payload, err := json.Marshal(&thread)
-	if err != nil {
+	if err := app.InsertRow(ctx, thread.Topic, thread.Unique.Hash, &thread); err != nil {
 		log.Println(err)
 		return err
 	}
-	if err := app.InsertRow(ctx, thread.Topic, thread.Unique.Hash, string(payload)); err != nil {
+	payload, err := json.Marshal(&thread)
+	if err != nil {
 		log.Println(err)
 		return err
 	}
@@ -145,35 +170,30 @@ func replyHandler(conn *roomer.Conn, msg *roomer.Message) error {
 		log.Println(err)
 		return err
 	}
+	if reply.Thread == "" || reply.Topic == "" {
+		return fmt.Errorf("invalid reply payload: missing thread or topic")
+	}
 	reply.Unique.Generate()
-	reply.FileInfo.Process()
+	if err := reply.FileInfo.Process(); err != nil {
+		log.Println("File processing failed:", err)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	// Get parent thread
-	obj, err := app.GetRow(ctx, reply.Topic, reply.Thread)
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-	// Convert to Thread
+	
+	// Unmarshal parent thread directly into Thread struct
 	var thread Thread
-	dataobj, err := json.Marshal(obj)
-	if err != nil {
+	if err := app.GetRowStruct(ctx, reply.Topic, reply.Thread, &thread); err != nil {
 		log.Println(err)
 		return err
 	}
-	err = json.Unmarshal(dataobj, &thread)
-	if err != nil {
-		log.Println(err)
-		return err
-	}
+
 	// Initialize Replies if nil
 	if thread.Replies == nil {
 		thread.Replies = make(map[string]Reply)
 	}
 	// Insert new reply
 	thread.Replies[reply.Unique.Hash] = reply
-	// Original tagging logic — fully preserved
+	// Tagging logic
 	for _, tag := range reply.Tagging {
 		if tag == reply.Thread {
 			// Tag the main thread
@@ -181,16 +201,11 @@ func replyHandler(conn *roomer.Conn, msg *roomer.Message) error {
 		} else if taggedReply, exists := thread.Replies[tag]; exists {
 			// Tag a specific reply — update it in place
 			taggedReply.TaggedBy = append(taggedReply.TaggedBy, reply.Unique.Hash)
-			thread.Replies[tag] = taggedReply // persist the update
+			thread.Replies[tag] = taggedReply // persist update
 		}
 	}
 	// Save updated thread back
-	thr, err := json.Marshal(&thread)
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-	if err := app.InsertRow(ctx, reply.Topic, reply.Thread, string(thr)); err != nil {
+	if err := app.InsertRow(ctx, reply.Topic, reply.Thread, &thread); err != nil {
 		log.Println(err)
 		return err
 	}
@@ -217,5 +232,7 @@ func main() {
 	if err := roomer.RegisterHandler("new-reply", replyHandler); err != nil {
 		log.Fatal("Failed to register handler:", err)
 	}
-	app.Start()
+	if err := app.Start(); err != nil {
+		log.Fatal("Application start error:", err)
+	}
 }

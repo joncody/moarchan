@@ -10,19 +10,30 @@ import (
 	"strings"
 )
 
-var validTableNameRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+var validTableNameRegex = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
 
 func IsValidTableName(name string) bool {
 	return validTableNameRegex.MatchString(name)
 }
 
-func (app *App) PrepareTables(ctx context.Context) error {
+func (app *App) EnsureTable(ctx context.Context, table string) error {
+	if !IsValidTableName(table) {
+		return fmt.Errorf("invalid table name: %q", table)
+	}
 	const queryTemplate = `
-		CREATE TABLE IF NOT EXISTS %s (
+		CREATE TABLE IF NOT EXISTS "%s" (
 			id BIGSERIAL PRIMARY KEY,
 			key TEXT UNIQUE NOT NULL,
 			value JSONB
 		)`
+	query := fmt.Sprintf(queryTemplate, table)
+	if _, err := app.Driver.ExecContext(ctx, query); err != nil {
+		return fmt.Errorf("ensure table %q: %w", table, err)
+	}
+	return nil
+}
+
+func (app *App) PrepareTables(ctx context.Context) error {
 	tables := []string{"auth"}
 	for _, r := range app.Routes {
 		if r.Table == "" || strings.HasPrefix(r.Table, "$") {
@@ -31,23 +42,19 @@ func (app *App) PrepareTables(ctx context.Context) error {
 		tables = append(tables, r.Table)
 	}
 	for _, table := range tables {
-		if !IsValidTableName(table) {
-			return fmt.Errorf("invalid table name: %q", table)
-		}
-		query := fmt.Sprintf(queryTemplate, table)
-		if _, err := app.Driver.ExecContext(ctx, query); err != nil {
-			return fmt.Errorf("create table %q: %w", table, err)
+		if err := app.EnsureTable(ctx, table); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
 func (app *App) GetRow(ctx context.Context, table, key string) (map[string]interface{}, error) {
-	if !IsValidTableName(table) {
-		return nil, fmt.Errorf("invalid table name: %q", table)
+	if err := app.EnsureTable(ctx, table); err != nil {
+		return nil, err
 	}
 	var value []byte
-	query := fmt.Sprintf(`SELECT value FROM %s WHERE key = $1`, table)
+	query := fmt.Sprintf(`SELECT value FROM "%s" WHERE key = $1`, table)
 	err := app.Driver.QueryRowContext(ctx, query, key).Scan(&value)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -57,22 +64,53 @@ func (app *App) GetRow(ctx context.Context, table, key string) (map[string]inter
 	}
 	var result map[string]interface{}
 	if err := json.Unmarshal(value, &result); err != nil {
+		var strValue string
+		if errStr := json.Unmarshal(value, &strValue); errStr == nil {
+			if errInner := json.Unmarshal([]byte(strValue), &result); errInner == nil {
+				return result, nil
+			}
+		}
 		return nil, fmt.Errorf("unmarshal JSON from %q (key=%q): %w", table, key, err)
 	}
 	return result, nil
 }
 
-func (app *App) GetRows(ctx context.Context, table string) ([]map[string]interface{}, error) {
-	if !IsValidTableName(table) {
-		return nil, fmt.Errorf("invalid table name: %q", table)
+func (app *App) GetRowStruct(ctx context.Context, table, key string, dest interface{}) error {
+	if err := app.EnsureTable(ctx, table); err != nil {
+		return err
 	}
-	query := fmt.Sprintf(`SELECT value FROM %s`, table)
+	var value []byte
+	query := fmt.Sprintf(`SELECT value FROM "%s" WHERE key = $1`, table)
+	err := app.Driver.QueryRowContext(ctx, query, key).Scan(&value)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("row not found in %q with key %q", table, key)
+		}
+		return fmt.Errorf("query row in %q: %w", table, err)
+	}
+	if err := json.Unmarshal(value, dest); err != nil {
+		var strValue string
+		if errStr := json.Unmarshal(value, &strValue); errStr == nil {
+			if errInner := json.Unmarshal([]byte(strValue), dest); errInner == nil {
+				return nil
+			}
+		}
+		return fmt.Errorf("unmarshal JSON from %q (key=%q): %w", table, key, err)
+	}
+	return nil
+}
+
+func (app *App) GetRows(ctx context.Context, table string) ([]map[string]interface{}, error) {
+	if err := app.EnsureTable(ctx, table); err != nil {
+		return nil, err
+	}
+	query := fmt.Sprintf(`SELECT value FROM "%s"`, table)
 	rows, err := app.Driver.QueryContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("query table %q: %w", table, err)
 	}
 	defer rows.Close()
-	var results []map[string]interface{}
+	results := make([]map[string]interface{}, 0)
 	for rows.Next() {
 		var value []byte
 		if err := rows.Scan(&value); err != nil {
@@ -80,6 +118,13 @@ func (app *App) GetRows(ctx context.Context, table string) ([]map[string]interfa
 		}
 		var entry map[string]interface{}
 		if err := json.Unmarshal(value, &entry); err != nil {
+			var strValue string
+			if errStr := json.Unmarshal(value, &strValue); errStr == nil {
+				if errInner := json.Unmarshal([]byte(strValue), &entry); errInner == nil {
+					results = append(results, entry)
+					continue
+				}
+			}
 			return nil, fmt.Errorf("unmarshal row in %q: %w", table, err)
 		}
 		results = append(results, entry)
@@ -91,15 +136,26 @@ func (app *App) GetRows(ctx context.Context, table string) ([]map[string]interfa
 }
 
 func (app *App) InsertRow(ctx context.Context, table, key string, value interface{}) error {
-	if !IsValidTableName(table) {
-		return fmt.Errorf("invalid table name: %q", table)
+	if err := app.EnsureTable(ctx, table); err != nil {
+		return err
 	}
-	data, err := json.Marshal(value)
-	if err != nil {
-		return fmt.Errorf("marshal value for %q/%q: %w", table, key, err)
+	var data []byte
+	var err error
+	switch v := value.(type) {
+	case []byte:
+		data = v
+	case json.RawMessage:
+		data = v
+	case string:
+		data = []byte(v)
+	default:
+		data, err = json.Marshal(v)
+		if err != nil {
+			return fmt.Errorf("marshal value for %q/%q: %w", table, key, err)
+		}
 	}
 	query := fmt.Sprintf(`
-		INSERT INTO %s (key, value)
+		INSERT INTO "%s" (key, value)
 		VALUES ($1, $2)
 		ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
 		table)
