@@ -1,56 +1,58 @@
-"use strict";
+function create_emitter(target) {
+    const events = Object.create(null);
+    let self;
 
-const emitter = function (value) {
-    const em = (
-        (value && typeof value === "object")
-        ? value
-        : {}
-    );
-    const events = {};
-    const api = Object.create(null);
-
-    api.emit = function (type, ...args) {
-        const list = events[type];
-        if (!Array.isArray(list)) {
+    function emit(type, ...args) {
+        if (typeof type !== "string") {
             return false;
         }
-        list.forEach(function (fn) {
-            fn.apply(api, args);
+        const list = events[type];
+        if (!Array.isArray(list) || list.length === 0) {
+            return false;
+        }
+        const copy = list.slice();
+        copy.forEach(function (fn) {
+            fn(...args);
         });
         return true;
-    };
+    }
 
-    api.addListener = function (type, listener) {
-        if (typeof listener !== "function") {
-            return api;
+    function addListener(type, listener) {
+        if (typeof type !== "string" || typeof listener !== "function") {
+            return self;
         }
-        if (events.newListener) {
-            api.emit(
-                "newListener",
-                type,
-                (
-                    typeof listener.listener === "function"
-                    ? listener.listener
-                    : listener
-                )
+        if (
+            Array.isArray(events.newListener) &&
+            events.newListener.length > 0
+        ) {
+            const reported = (
+                typeof listener.listener === "function"
+                ? listener.listener
+                : listener
             );
+            emit("newListener", type, reported);
         }
-        if (!events[type]) {
+        if (!Array.isArray(events[type])) {
             events[type] = [listener];
         } else {
             events[type].push(listener);
         }
-        return api;
-    };
-    api.on = api.addListener;
+        return self;
+    }
 
-    api.removeListener = function (type, listener) {
+    function removeListener(type, listener) {
+        if (typeof type !== "string" || typeof listener !== "function") {
+            return self;
+        }
         const list = events[type];
-        if (!Array.isArray(list) || typeof listener !== "function") {
-            return api;
+        if (!Array.isArray(list) || list.length === 0) {
+            return self;
         }
         const index = list.findIndex(function (v) {
-            return v === listener || (v.listener && v.listener === listener);
+            return (
+                v === listener ||
+                (v.listener !== undefined && v.listener === listener)
+            );
         });
         if (index >= 0) {
             const removed = list[index];
@@ -58,65 +60,112 @@ const emitter = function (value) {
             if (list.length === 0) {
                 delete events[type];
             }
-            if (events.removeListener) {
+            if (
+                Array.isArray(events.removeListener) &&
+                events.removeListener.length > 0
+            ) {
                 const reported = (
-                    removed.listener && typeof removed.listener === "function"
+                    typeof removed.listener === "function"
                     ? removed.listener
                     : removed
                 );
-                api.emit("removeListener", type, reported);
+                emit("removeListener", type, reported);
             }
         }
-        return api;
-    };
-    api.off = api.removeListener;
+        return self;
+    }
 
-    api.once = function (type, listener) {
-        if (typeof listener !== "function") {
-            return api;
+    function once(type, listener) {
+        if (typeof type !== "string" || typeof listener !== "function") {
+            return self;
         }
-        const onetime = function (...args) {
-            api.removeListener(type, onetime);
-            listener.apply(api, args);
-        };
+        function onetime(...args) {
+            removeListener(type, onetime);
+            listener(...args);
+        }
         onetime.listener = listener;
-        return api.on(type, onetime);
-    };
+        return addListener(type, onetime);
+    }
 
-    api.removeAllListeners = function (type) {
-        if (!type) {
-            if (!events.removeListener) {
-                // Fast path: no removeListener events, delete all keys directly
+    function removeAllListeners(type) {
+        if (type === undefined) {
+            if (
+                !Array.isArray(events.removeListener) ||
+                events.removeListener.length === 0
+            ) {
                 Object.keys(events).forEach(function (key) {
                     delete events[key];
                 });
             } else {
                 Object.keys(events).forEach(function (key) {
                     if (key !== "removeListener") {
-                        api.removeAllListeners(key);
+                        removeAllListeners(key);
                     }
                 });
-                api.removeAllListeners("removeListener");
+                removeAllListeners("removeListener");
             }
-            return api;
+            return self;
+        }
+        if (typeof type !== "string") {
+            return self;
         }
         const list = events[type];
         if (Array.isArray(list)) {
-            list.forEach(function (fn) {
-                api.removeListener(type, fn);
+            const copy = list.slice();
+            copy.forEach(function (fn) {
+                removeListener(type, fn);
             });
         }
-        return api;
-    };
+        return self;
+    }
 
-    api.listeners = function (type) {
-        if (typeof type === "string") {
-            return events[type] || [];
+    function listeners(type) {
+        if (type === undefined) {
+            const all = [];
+            Object.keys(events).forEach(function (key) {
+                events[key].forEach(function (v) {
+                    all.push(
+                        typeof v.listener === "function"
+                        ? v.listener
+                        : v
+                    );
+                });
+            });
+            return all;
         }
-        return Object.values(events).flat();
+        if (typeof type === "string") {
+            const list = events[type];
+            if (Array.isArray(list)) {
+                return list.map(function (v) {
+                    return (
+                        typeof v.listener === "function"
+                        ? v.listener
+                        : v
+                    );
+                });
+            }
+            return [];
+        }
+        return [];
+    }
+
+    const methods = {
+        addListener,
+        emit,
+        listeners,
+        off: removeListener,
+        on: addListener,
+        once,
+        removeAllListeners,
+        removeListener
     };
 
-    return Object.assign(em, api);
-};
+    if (typeof target === "object" && target !== null) {
+        self = Object.assign({}, target, methods);
+    } else {
+        self = Object.freeze(methods);
+    }
+    return self;
+}
 
-export default Object.freeze(emitter);
+export default Object.freeze(create_emitter);

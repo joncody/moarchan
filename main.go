@@ -2,17 +2,18 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"image"
-	"image/gif"
-	"image/jpeg"
-	"image/png"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"log"
 	"os"
-	"strconv"
+	"path/filepath"
 	"time"
 
 	"github.com/google/uuid"
@@ -66,64 +67,73 @@ type FileInfo struct {
 }
 
 func (f *FileInfo) Process() error {
-	var config image.Config
 	if f.File == "" {
 		return nil
 	}
-	f.Path = fmt.Sprintf("./static/images/uploads/%s", f.Name)
+
+	// 1. Decode Data URL
 	fdata, err := dataurl.DecodeString(f.File)
 	if err != nil {
 		log.Println("DataURL decode error:", err)
 		return err
 	}
+
+	// 2. Sanitize filename to prevent path traversal
+	safeName := filepath.Base(f.Name)
+	if safeName == "" || safeName == "." {
+		safeName = fmt.Sprintf("upload_%d.jpg", time.Now().UnixNano())
+	}
+	f.Name = safeName
+	f.Path = fmt.Sprintf("./static/images/uploads/%s", safeName)
+
+	// 3. Ensure upload directory exists
 	if err := os.MkdirAll("./static/images/uploads", 0755); err != nil {
 		log.Println("MkdirAll error:", err)
 		return err
 	}
+
+	// 4. Write image file to disk
 	if err := os.WriteFile(f.Path, fdata.Data, 0644); err != nil {
 		log.Println("WriteFile error:", err)
 		return err
 	}
-	saved, err := os.Open(f.Path)
+
+	// 5. Decode image dimensions directly from binary header bytes
+	config, _, err := image.DecodeConfig(bytes.NewReader(fdata.Data))
 	if err != nil {
-		log.Println("Open image error:", err)
-		return err
+		log.Println("Image DecodeConfig warning:", err)
+		f.Dimensions = "N/A"
+	} else {
+		f.Dimensions = fmt.Sprintf("%dx%d", config.Width, config.Height)
 	}
-	defer saved.Close()
-	if f.Mime == "image/jpeg" {
-		config, err = jpeg.DecodeConfig(saved)
-	} else if f.Mime == "image/png" {
-		config, err = png.DecodeConfig(saved)
-	} else if f.Mime == "image/gif" {
-		config, err = gif.DecodeConfig(saved)
-	}
-	if err != nil {
-		log.Println("DecodeConfig error:", err)
-		return err
-	}
-	f.Dimensions = fmt.Sprintf("%dx%d", config.Width, config.Height)
-	
-	// Convert raw byte count string to KB if needed
-	if f.Size != "" {
-		if b, parseErr := strconv.ParseInt(f.Size, 10, 64); parseErr == nil && b > 0 {
-			f.Size = fmt.Sprintf("%.1f", float64(b)/1024.0)
-		}
-	}
-	
+
+	// 6. Calculate accurate file size in KB
+	f.Size = fmt.Sprintf("%.1f", float64(len(fdata.Data))/1024.0)
+
+	// 7. Clear raw base64 payload from memory
 	f.File = ""
 	return nil
 }
 
 func (u *Unique) Generate() {
 	now := time.Now()
-	u.Timestamp = fmt.Sprintf("%d/%d/%d(%s)%02d:%02d:%02d", now.Month(), now.Day(), now.Year(), now.Weekday().String()[:3], now.Hour(), now.Minute(), now.Second())
+	u.Timestamp = fmt.Sprintf(
+		"%d/%d/%d(%s)%02d:%02d:%02d",
+		now.Month(),
+		now.Day(),
+		now.Year(),
+		now.Weekday().String()[:3],
+		now.Hour(),
+		now.Minute(),
+		now.Second(),
+	)
 	id, err := uuid.NewRandom()
 	if err != nil {
 		log.Println(err)
 		return
 	}
 	u.Uuid = id.String()
-	u.Hash = fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("%s%s", u.Timestamp, u.Uuid))))[:9]
+	u.Hash = fmt.Sprintf("%x", sha256.Sum256([]byte(u.Timestamp+u.Uuid)))[:9]
 }
 
 func SendMessage(conn *roomer.Conn, msg *roomer.Message) {
@@ -143,7 +153,7 @@ func threadHandler(conn *roomer.Conn, msg *roomer.Message) error {
 	}
 	thread.Unique.Generate()
 	if err := thread.FileInfo.Process(); err != nil {
-		log.Println("File processing failed:", err)
+		log.Println("File processing warning:", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -175,41 +185,36 @@ func replyHandler(conn *roomer.Conn, msg *roomer.Message) error {
 	}
 	reply.Unique.Generate()
 	if err := reply.FileInfo.Process(); err != nil {
-		log.Println("File processing failed:", err)
+		log.Println("File processing warning:", err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	
-	// Unmarshal parent thread directly into Thread struct
+
 	var thread Thread
 	if err := app.GetRowStruct(ctx, reply.Topic, reply.Thread, &thread); err != nil {
 		log.Println(err)
 		return err
 	}
 
-	// Initialize Replies if nil
 	if thread.Replies == nil {
 		thread.Replies = make(map[string]Reply)
 	}
-	// Insert new reply
 	thread.Replies[reply.Unique.Hash] = reply
-	// Tagging logic
+
 	for _, tag := range reply.Tagging {
 		if tag == reply.Thread {
-			// Tag the main thread
 			thread.TaggedBy = append(thread.TaggedBy, reply.Unique.Hash)
 		} else if taggedReply, exists := thread.Replies[tag]; exists {
-			// Tag a specific reply — update it in place
 			taggedReply.TaggedBy = append(taggedReply.TaggedBy, reply.Unique.Hash)
-			thread.Replies[tag] = taggedReply // persist update
+			thread.Replies[tag] = taggedReply
 		}
 	}
-	// Save updated thread back
+
 	if err := app.InsertRow(ctx, reply.Topic, reply.Thread, &thread); err != nil {
 		log.Println(err)
 		return err
 	}
-	// Send reply response
+
 	payload, err := json.Marshal(&reply)
 	if err != nil {
 		log.Println(err)

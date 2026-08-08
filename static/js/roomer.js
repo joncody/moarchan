@@ -1,211 +1,335 @@
-"use strict";
-
 import bytecursor from "./bytecursor.js";
 import emitter from "./emitter.js";
 
 const decoder = new TextDecoder("utf-8");
-const reserved = ["open", "close", "join", "join_ack", "leave", "leave_ack", "new_member", "member_left"];
+const encoder = new TextEncoder();
 
-function newMessage(room, event, dst, src, payload = "") {
+const reserved_events = [
+    "close",
+    "join",
+    "join_ack",
+    "leave",
+    "leave_ack",
+    "member_left",
+    "new_member",
+    "open"
+];
+
+function new_message(room_name, event_name, dst_id, src_id, payload_data) {
+    let dst = dst_id;
+    let event = event_name;
+    let payload = payload_data;
+    let room = room_name;
+    let src = src_id;
+
+    if (typeof room !== "string") {
+        room = "";
+    }
+    if (typeof event !== "string") {
+        event = "";
+    }
     if (typeof dst !== "string") {
         dst = "";
     }
     if (typeof src !== "string") {
         src = "";
     }
-    const payloadlen = payload.byteLength || payload.length || 0;
-    const data = bytecursor(new ArrayBuffer(room.length + event.length + dst.length + src.length + payloadlen + 20));
-    data.writeUint32(room.length).writeString(room);
-    data.writeUint32(event.length).writeString(event);
-    data.writeUint32(dst.length).writeString(dst);
-    data.writeUint32(src.length).writeString(src);
-    data.writeUint32(payloadlen);
+    if (payload === undefined) {
+        payload = "";
+    }
+
+    let payload_len = 0;
+    if (typeof payload === "string") {
+        payload_len = encoder.encode(payload).byteLength;
+    } else if (
+        typeof payload === "object" &&
+        payload !== null &&
+        typeof payload.byteLength === "number"
+    ) {
+        payload_len = payload.byteLength;
+    }
+
+    const total_bytes = (
+        room.length +
+        event.length +
+        dst.length +
+        src.length +
+        payload_len +
+        20
+    );
+
+    const data = bytecursor(new ArrayBuffer(total_bytes));
+    data.writeUint32(room.length);
+    data.writeString(room);
+    data.writeUint32(event.length);
+    data.writeString(event);
+    data.writeUint32(dst.length);
+    data.writeString(dst);
+    data.writeUint32(src.length);
+    data.writeString(src);
+    data.writeUint32(payload_len);
+
     if (typeof payload === "string") {
         data.writeString(payload);
     } else {
         data.writeBytes(payload);
     }
-    return data.rewind().getBytes();
+
+    data.rewind();
+    return data.getBytes();
 }
 
-const roomer = function (url) {
+function roomer(url) {
     if (typeof url !== "string") {
         throw new TypeError("WebSocket URL must be a string.");
     }
 
-    const rooms = {};
+    const rooms = Object.create(null);
     let socket;
 
-    function getRoom(name) {
-        const room = emitter();
-        const members = [];
-        let open = false;
-        let id = "";
-
+    function get_room(name) {
         if (typeof name !== "string") {
             throw new TypeError("Room name must be a string");
         }
-        if (rooms.hasOwnProperty(name)) {
+        if (rooms[name] !== undefined) {
             return rooms[name];
         }
 
-        room.name = name;
+        const members = [];
+        const registered_events = Object.create(null);
+        let is_open = false;
+        let member_id = "";
+        let self;
 
-        room.open = function () {
-            return open;
-        };
-
-        room.members = function () {
-            if (typeof structuredClone === "function") {
-                return structuredClone(members);
+        function clearListeners(exceptions) {
+            let exc_list = exceptions;
+            if (!Array.isArray(exc_list)) {
+                exc_list = [];
             }
-            return JSON.parse(JSON.stringify(members));
-        };
+            Object.keys(registered_events).forEach(function (event_type) {
+                if (exc_list.includes(event_type) === false) {
+                    self.removeAllListeners(event_type);
+                    delete registered_events[event_type];
+                }
+            });
+            return self;
+        }
 
-        room.id = function () {
-            return id;
-        };
+        function forceClose() {
+            if (is_open === true) {
+                is_open = false;
+                members.length = 0;
+                member_id = "";
+                self.emit("close");
+                delete rooms[name];
+            }
+            return self;
+        }
 
-        room.send = function (event, payload, dst) {
-            if (!open) {
+        function getId() {
+            return member_id;
+        }
+
+        function join(room_name) {
+            if (is_open === false) {
+                throw new Error("Cannot join: room is closed.");
+            }
+            if (typeof room_name !== "string") {
+                throw new TypeError("Room name must be a string.");
+            }
+            if (rooms[room_name] !== undefined) {
+                return rooms[room_name];
+            }
+            return get_room(room_name);
+        }
+
+        function leave() {
+            if (is_open === false) {
+                throw new Error("Cannot leave: room is closed.");
+            }
+            if (socket !== undefined) {
+                socket.send(
+                    new_message(
+                        name,
+                        "leave",
+                        member_id,
+                        member_id,
+                        member_id
+                    )
+                );
+            }
+            return self;
+        }
+
+        function getMembers() {
+            return members.slice();
+        }
+
+        function getIsOpen() {
+            return is_open;
+        }
+
+        function parse(packet) {
+            let payload_text;
+            let member_index;
+
+            switch (packet.event) {
+            case "join_ack":
+                member_id = packet.src;
+                members.length = 0;
+                members.push(...JSON.parse(decoder.decode(packet.payload)));
+                is_open = true;
+                self.emit("open");
+                break;
+
+            case "new_member":
+                payload_text = decoder.decode(packet.payload);
+                if (members.includes(payload_text) === false) {
+                    members.push(payload_text);
+                    self.emit("new_member", payload_text);
+                }
+                break;
+
+            case "leave_ack":
+                self.emit("close");
+                is_open = false;
+                members.length = 0;
+                member_id = "";
+                delete rooms[name];
+                break;
+
+            case "member_left":
+                payload_text = decoder.decode(packet.payload);
+                if (members.includes(payload_text) === true) {
+                    member_index = members.indexOf(payload_text);
+                    members.splice(member_index, 1);
+                    self.emit("member_left", payload_text);
+                }
+                break;
+
+            default:
+                self.emit(packet.event, packet.payload, packet.src);
+            }
+        }
+
+        function send(event, payload, dst) {
+            if (is_open === false) {
                 throw new Error("Cannot send: socket is closed.");
             }
             if (typeof event !== "string") {
-                throw new Error("Event name must  be a string.");
+                throw new Error("Event name must be a string.");
             }
-            if (reserved.includes(event)) {
+            if (reserved_events.includes(event) === true) {
                 throw new Error("Reserved event: " + event);
             }
-            socket.send(newMessage(name, event, dst, id, payload));
-            return room;
+            if (socket !== undefined) {
+                socket.send(
+                    new_message(name, event, dst, member_id, payload)
+                );
+            }
+            return self;
+        }
+
+        const room_methods = {
+            clearListeners,
+            forceClose,
+            id: getId,
+            join,
+            leave,
+            members: getMembers,
+            name,
+            open: getIsOpen,
+            parse,
+            send
         };
 
-        room.join = function (roomname) {
-            if (!open) {
-                throw new Error("Cannot join: room is closed.");
+        if (name === "root") {
+            room_methods.purge = function () {
+                Object.keys(rooms).forEach(function (r_name) {
+                    if (r_name !== "root") {
+                        rooms[r_name].leave();
+                    }
+                });
+                return self;
+            };
+
+            room_methods.rooms = function () {
+                const room_copy = Object.create(null);
+                Object.keys(rooms).forEach(function (r_key) {
+                    room_copy[r_key] = rooms[r_key];
+                });
+                return Object.freeze(room_copy);
+            };
+        }
+
+        self = emitter(room_methods);
+
+        const original_on = self.on;
+        const original_once = self.once;
+
+        self.on = function (type, fn, capture) {
+            if (typeof type === "string") {
+                registered_events[type] = true;
             }
-            if (typeof roomname !== "string") {
-                throw new TypeError("Room name must be a string.");
+            return original_on(type, fn, capture);
+        };
+
+        self.once = function (type, fn, capture) {
+            if (typeof type === "string") {
+                registered_events[type] = true;
             }
-            return (
-                rooms.hasOwnProperty(roomname)
-                ? rooms[roomname]
-                : getRoom(roomname)
+            return original_once(type, fn, capture);
+        };
+
+        rooms[name] = self;
+
+        if (name !== "root" && socket !== undefined) {
+            socket.send(
+                new_message(name, "join", member_id, member_id, member_id)
             );
-        };
+        }
 
-        room.leave = function () {
-            if (!open) {
-                throw new Error("Cannot leave: room is closed.");
+        return self;
+    }
+
+    if (WebSocket !== undefined) {
+        socket = new WebSocket(url);
+        socket.binaryType = "arraybuffer";
+
+        socket.onmessage = function (e) {
+            const data = bytecursor(e.data);
+            const room_str = data.getString(data.getUint32());
+            const event_str = data.getString(data.getUint32());
+            const dst_str = data.getString(data.getUint32());
+            const src_str = data.getString(data.getUint32());
+            const payload_bytes = data.getBytes(data.getUint32());
+
+            const packet = {
+                dst: dst_str,
+                event: event_str,
+                payload: payload_bytes,
+                room: room_str,
+                src: src_str
+            };
+
+            if (rooms[packet.room] === undefined) {
+                return;
             }
-            socket.send(newMessage(name, "leave", id, id, id));
-            return room;
+            rooms[packet.room].parse(packet);
         };
 
-        room.parse = function (packet) {
-            let payload;
-            switch (packet.event) {
-            case "join_ack":
-                id = packet.src;
-                members.length = 0;
-                members.push(...JSON.parse(decoder.decode(packet.payload)));
-                open = true;
-                room.emit("open");
-                break;
-            case "new_member":
-                payload = decoder.decode(packet.payload);
-                if (!members.includes(payload)) {
-                    members.push(payload);
-                    room.emit("new_member", payload);
-                }
-                break;
-            case "leave_ack":
-                room.emit("close");
-                open = false;
-                members.length = 0;
-                id = "";
-                delete rooms[name];
-                break;
-            case "member_left":
-                payload = decoder.decode(packet.payload);
-                if (members.includes(payload)) {
-                    const index = members.indexOf(payload);
-                    members.splice(index, 1);
-                    room.emit("member_left", payload);
-                }
-                break;
-            default:
-                room.emit(packet.event, packet.payload, packet.src);
-            }
-        };
-
-        room.clearListeners = function (exceptions = []) {
-            Object.keys(room.events).forEach(function (event) {
-                if (exceptions.indexOf(event) === -1) {
-                    room.removeAllListeners(event);
-                }
+        socket.onclose = function () {
+            Object.keys(rooms).forEach(function (r_name) {
+                rooms[r_name].forceClose();
             });
         };
 
-        room.forceClose = function () {
-            if (open) {
-                open = false;
-                members.length = 0;
-                id = "";
-                room.emit("close");
-                delete rooms[name];
-            }
+        socket.onerror = function (err) {
+            console.error("WebSocket error: " + err);
         };
-
-        rooms[name] = room;
-
-        if (name !== "root") {
-            socket.send(newMessage(name, "join", id, id, id));
-        } else {
-            room.purge = function () {
-                Object.keys(rooms).forEach(function (name) {
-                    if (name !== "root") {
-                        rooms[name].leave();
-                    }
-                });
-            };
-            room.rooms = function () {
-                if (typeof structuredClone === "function") {
-                    return structuredClone(rooms);
-                }
-                return JSON.parse(JSON.stringify(rooms));
-            };
-        }
-        return Object.freeze(room);
     }
 
-    socket = new WebSocket(url);
-    socket.binaryType = "arraybuffer";
-    socket.onmessage = function (e) {
-        const data = bytecursor(e.data);
-        const packet = {
-            room: data.getString(data.getUint32()),
-            event: data.getString(data.getUint32()),
-            dst: data.getString(data.getUint32()),
-            src: data.getString(data.getUint32()),
-            payload: data.getBytes(data.getUint32())
-        };
-
-        if (!rooms.hasOwnProperty(packet.room)) {
-            console.warn("Room " + packet.room + " does not exist.");
-            return;
-        }
-        rooms[packet.room].parse(packet);
-    };
-    socket.onclose = function () {
-        Object.values(rooms).forEach(function (room) {
-            room.forceClose();
-        });
-    };
-    socket.onerror = function (err) {
-        console.error("WebSocket error: " + err);
-    };
-    return getRoom("root");
-};
+    return get_room("root");
+}
 
 export default Object.freeze(roomer);
