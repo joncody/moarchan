@@ -108,7 +108,10 @@ func (app *App) SetupRoutes() (*mux.Router, error) {
 	router.HandleFunc("/login", app.Login).Methods("POST")
 	router.HandleFunc("/register", app.Register).Methods("POST")
 	router.HandleFunc("/logout", app.Logout).Methods("POST")
-	router.HandleFunc("/ws", roomer.SocketHandler(app.GetSessionValues)).Methods("GET")
+	router.HandleFunc("/ws", roomer.SocketHandlerWithOptions(
+        roomer.WithAuthorize(app.GetSessionValues),
+        roomer.WithMaxMessageSize(1024 * 1024 * 1024),
+    )).Methods("GET")
 	router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("./static/"))))
 	router.PathPrefix("/").HandlerFunc(app.baseHandler).Methods("GET")
 	if err := app.CompileRoutes(); err != nil {

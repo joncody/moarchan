@@ -274,8 +274,8 @@ frame.controllers.service = function service(global, view) {
 
         const file = files[0];
 
-        if (file.size > 8192 * 1024) {
-            return global.alert("File size exceeds maximum allowed limit of 8192 KB (8 MB).");
+        if (file.size > 1024 * 1024 * 1024) {
+            return global.alert("File size exceeds maximum allowed limit of 1 GB.");
         }
 
         const rawName = (nameInput && nameInput.value) || "Anonymous";
