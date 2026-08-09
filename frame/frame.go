@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -45,12 +46,27 @@ type App struct {
 	Added          []AddedRoute
 	CompiledRoutes []CompiledRoute
 	Router         *mux.Router
+	knownTables    sync.Map // In-memory cache of verified database tables
+}
+
+func getEnv(key, fallback string) string {
+	if val := os.Getenv(key); val != "" {
+		return val
+	}
+	return fallback
 }
 
 func (app *App) Start() error {
+	dbUser := getEnv("POSTGRES_USER", app.AppConfig.Database.User)
+	dbPass := getEnv("POSTGRES_PASSWORD", app.AppConfig.Database.Password)
+	dbName := getEnv("POSTGRES_DB", app.AppConfig.Database.Name)
+	dbHost := getEnv("POSTGRES_HOST", "localhost")
+	dbPort := getEnv("POSTGRES_PORT", "5432")
+	sslMode := getEnv("POSTGRES_SSLMODE", "disable")
+
 	dbstring := fmt.Sprintf(
-		"user=%s password=%s dbname=%s sslmode=disable",
-		app.AppConfig.Database.User, app.AppConfig.Database.Password, app.AppConfig.Database.Name,
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		dbHost, dbPort, dbUser, dbPass, dbName, sslMode,
 	)
 	db, err := sql.Open("postgres", dbstring)
 	if err != nil {
@@ -146,8 +162,12 @@ func NewApp(configPath string) (*App, error) {
 		app.AppConfig.ViewsPattern = "./static/views/*"
 	}
 
+	// Session keys override via environment variables
+	hashKey := getEnv("SESSION_HASH_KEY", app.AppConfig.HashKey)
+	blockKey := getEnv("SESSION_BLOCK_KEY", app.AppConfig.BlockKey)
+
 	secure := app.AppConfig.SSLPort != "" && app.AppConfig.SSLPort != "0"
-	store, err := NewSessionStore(app.AppConfig.Name, app.AppConfig.HashKey, app.AppConfig.BlockKey, secure)
+	store, err := NewSessionStore(app.AppConfig.Name, hashKey, blockKey, secure)
 	if err != nil {
 		return nil, fmt.Errorf("session store: %w", err)
 	}

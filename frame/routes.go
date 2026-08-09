@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"log"
@@ -16,6 +17,11 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/joncody/roomer"
+)
+
+var (
+	ErrUnauthorized = errors.New("401 Unauthorized: authentication required")
+	ErrForbidden    = errors.New("403 Forbidden: insufficient privilege")
 )
 
 type RouteConfig struct {
@@ -61,10 +67,21 @@ func ToKey(s string) string {
 	return strings.Trim(s, "-")
 }
 
+func titleCaseWords(s string) string {
+	words := strings.Fields(s)
+	for i, w := range words {
+		if len(w) > 0 {
+			words[i] = strings.ToUpper(w[:1]) + w[1:]
+		}
+	}
+	return strings.Join(words, " ")
+}
+
 func FromKey(s string) string {
+	s = strings.Replace(s, "_-_", " __SEPARATOR__ ", -1)
 	s = strings.Replace(s, "-", " ", -1)
-	s = strings.Replace(s, "_ _", " - ", -1)
-	return strings.Title(s)
+	s = strings.Replace(s, " __SEPARATOR__ ", " - ", -1)
+	return titleCaseWords(s)
 }
 
 var TemplateFuncs = template.FuncMap{
@@ -109,10 +126,10 @@ func (app *App) SetupRoutes() (*mux.Router, error) {
 	router.HandleFunc("/register", app.Register).Methods("POST")
 	router.HandleFunc("/logout", app.Logout).Methods("POST")
 	router.HandleFunc("/ws", roomer.SocketHandlerWithOptions(
-        roomer.WithAuthorize(app.GetSessionValues),
-		roomer.WithMaxMessageSize(32 * 1024 * 1024), // 32MB max message limit for image uploads
-		roomer.WithBufferSizes(16384, 16384),        // Optimized 16KB WebSocket IO buffers
-    )).Methods("GET")
+		roomer.WithAuthorize(app.GetSessionValues),
+		roomer.WithMaxMessageSize(32*1024*1024), // 32MB max message limit
+		roomer.WithBufferSizes(16384, 16384),
+	)).Methods("GET")
 	router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("./static/"))))
 	router.PathPrefix("/").HandlerFunc(app.baseHandler).Methods("GET")
 	if err := app.CompileRoutes(); err != nil {
@@ -138,8 +155,10 @@ func (app *App) baseHandler(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	data, _ := app.GetSessionValues(r)
-	// Render the template
+	data, err := app.GetSessionValues(r)
+	if err != nil {
+		data = make(map[string]string)
+	}
 	if err := app.Templates.ExecuteTemplate(w, "base", data); err != nil {
 		log.Printf("Template error in baseHandler: %v", err)
 		http.Error(w, "Render failed", http.StatusInternalServerError)
@@ -171,7 +190,7 @@ func (app *App) Render(c *roomer.Conn, msg *roomer.Message, tmpl string, control
 	msg.EventLength = len(msg.Event)
 	msg.Payload = payload
 	msg.PayloadLength = len(payload)
-    c.SendToClient(c.ID, "response", payload)
+	c.SendToClient(c.ID, "response", payload)
 }
 
 func resolveDynamic(field string, subs []string) string {
@@ -203,22 +222,33 @@ func (app *App) MatchCompiledRoute(path string) (*CompiledRoute, []string) {
 	return nil, nil
 }
 
-func SelectRouteConfig(route Route, privilege string) RouteConfig {
+func SelectRouteConfig(route Route, privilege string) (RouteConfig, error) {
 	// Admin override
-	if privilege == "admin" &&
-		(route.Admin.Template != "" || route.Admin.Controllers != "") {
-		return route.Admin
+	if route.Admin.Template != "" || route.Admin.Controllers != "" {
+		if privilege == "admin" {
+			return route.Admin, nil
+		}
+		if privilege == "" {
+			return RouteConfig{}, ErrUnauthorized
+		}
+		return RouteConfig{}, ErrForbidden
 	}
+
 	// Authorized users
-	if privilege != "" && route.Authorized.Privilege != "" {
+	if route.Authorized.Privilege != "" {
+		if privilege == "" {
+			return RouteConfig{}, ErrUnauthorized
+		}
 		for _, allowed := range strings.Split(route.Authorized.Privilege, ",") {
 			if strings.TrimSpace(allowed) == privilege {
-				return route.Authorized
+				return route.Authorized, nil
 			}
 		}
+		return RouteConfig{}, ErrForbidden
 	}
-	// Default
-	return route.RouteConfig
+
+	// Default public config
+	return route.RouteConfig, nil
 }
 
 func (app *App) ResolveRouteData(ctx context.Context, cfg RouteConfig, subs []string) (interface{}, error) {
@@ -226,6 +256,9 @@ func (app *App) ResolveRouteData(ctx context.Context, cfg RouteConfig, subs []st
 	key := resolveDynamic(cfg.Key, subs)
 	if table == "" {
 		return nil, nil
+	}
+	if IsSystemTable(table) {
+		return nil, fmt.Errorf("access to system table %q via dynamic route is restricted", table)
 	}
 	if !IsValidTableName(table) {
 		return nil, fmt.Errorf("invalid table name: %q", table)
@@ -236,20 +269,46 @@ func (app *App) ResolveRouteData(ctx context.Context, cfg RouteConfig, subs []st
 	return app.GetRows(ctx, table)
 }
 
+func (app *App) sendErrorResponse(c *roomer.Conn, msg *roomer.Message, status int, text string) {
+	resp := map[string]interface{}{
+		"error":  text,
+		"status": status,
+	}
+	payload, _ := json.Marshal(resp)
+	msg.Event = "error"
+	msg.EventLength = len(msg.Event)
+	msg.Payload = payload
+	msg.PayloadLength = len(payload)
+	c.SendToClient(c.ID, "error", payload)
+}
+
 func (app *App) ProcessRequest(c *roomer.Conn, msg *roomer.Message) error {
-	path := string(msg.Payload)
+	path := strings.TrimSpace(string(msg.Payload))
+
 	// 1. Added routes (custom handlers)
 	if app.matchAddedRoute(c, msg, path) {
 		return nil
 	}
+
 	// 2. Match configured routes
 	cr, subs := app.MatchCompiledRoute(path)
 	if cr == nil {
-		return fmt.Errorf("No route matched: %s", path)
+		app.sendErrorResponse(c, msg, http.StatusNotFound, fmt.Sprintf("No route matched: %s", path))
+		return fmt.Errorf("no route matched: %s", path)
 	}
+
 	// 3. Select route config by privilege
 	privilege := c.Claims["privilege"]
-	cfg := SelectRouteConfig(cr.Config, privilege)
+	cfg, err := SelectRouteConfig(cr.Config, privilege)
+	if err != nil {
+		if errors.Is(err, ErrUnauthorized) {
+			app.sendErrorResponse(c, msg, http.StatusUnauthorized, "Authentication required")
+		} else {
+			app.sendErrorResponse(c, msg, http.StatusForbidden, "Access denied")
+		}
+		return fmt.Errorf("route permission error (%s): %w", path, err)
+	}
+
 	// 4. Load data (if any)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -257,6 +316,7 @@ func (app *App) ProcessRequest(c *roomer.Conn, msg *roomer.Message) error {
 	if err != nil {
 		log.Printf("Route data error (%s): %v", path, err)
 	}
+
 	// 5. Render response
 	controllers := strings.Split(cfg.Controllers, ",")
 	app.Render(c, msg, cfg.Template, controllers, data)

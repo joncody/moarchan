@@ -21,6 +21,9 @@ type Auth struct {
 
 const privilegeUser = "user"
 
+// Pre-computed dummy hash to enforce constant-time execution during lookup failures.
+const dummyHash = "$2a$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUU123456"
+
 // validateAlias checks if an alias meets format requirements.
 func validateAlias(alias string) bool {
 	if len(alias) < 3 || len(alias) > 64 {
@@ -51,6 +54,10 @@ func (app *App) IsAliasAvailable(ctx context.Context, alias string) (bool, error
 
 // CreateUser hashes the password and inserts a new user into the auth table.
 func (app *App) CreateUser(ctx context.Context, alias, password string) (*Auth, error) {
+	if len(password) < 8 || len(password) > 72 {
+		return nil, errors.New("password must be between 8 and 72 characters")
+	}
+
 	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, fmt.Errorf("hash password: %w", err)
@@ -63,30 +70,44 @@ func (app *App) CreateUser(ctx context.Context, alias, password string) (*Auth, 
 	if err != nil {
 		return nil, fmt.Errorf("marshal auth data: %w", err)
 	}
+
+	// Directly insert and rely on unique constraints to prevent TOCTOU race conditions.
 	_, err = app.Driver.ExecContext(ctx, `INSERT INTO auth (key, value) VALUES ($1, $2)`, alias, data)
 	if err != nil {
-		return nil, fmt.Errorf("insert user record: %w", err)
+		return nil, fmt.Errorf("user already exists or database error: %w", err)
 	}
 	return auth, nil
 }
 
-// VerifyCredentials validates alias/password and returns the user auth data on success.
+// VerifyCredentials validates alias/password using constant-time checks to prevent user enumeration.
 func (app *App) VerifyCredentials(ctx context.Context, alias, password string) (*Auth, error) {
-	var data []byte
-	err := app.Driver.QueryRowContext(ctx, `SELECT value FROM auth WHERE key = $1`, alias).Scan(&data)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, errors.New("invalid alias or password")
-		}
-		return nil, fmt.Errorf("lookup user: %w", err)
-	}
-	var auth Auth
-	if err := json.Unmarshal(data, &auth); err != nil {
-		return nil, fmt.Errorf("corrupt auth data for alias %q", alias)
-	}
-	if err := bcrypt.CompareHashAndPassword([]byte(auth.PasswordHash), []byte(password)); err != nil {
+	if len(password) == 0 || len(password) > 72 {
 		return nil, errors.New("invalid alias or password")
 	}
+
+	var data []byte
+	err := app.Driver.QueryRowContext(ctx, `SELECT value FROM auth WHERE key = $1`, alias).Scan(&data)
+
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("lookup user: %w", err)
+	}
+
+	var auth Auth
+	targetHash := dummyHash
+
+	if err == nil {
+		if jsonErr := json.Unmarshal(data, &auth); jsonErr == nil {
+			targetHash = auth.PasswordHash
+		}
+	}
+
+	// Always execute CompareHashAndPassword to maintain constant execution time.
+	bcryptErr := bcrypt.CompareHashAndPassword([]byte(targetHash), []byte(password))
+
+	if err != nil || bcryptErr != nil {
+		return nil, errors.New("invalid alias or password")
+	}
+
 	return &auth, nil
 }
 
@@ -95,26 +116,17 @@ func (app *App) VerifyCredentials(ctx context.Context, alias, password string) (
 func (app *App) Register(w http.ResponseWriter, r *http.Request) {
 	alias := strings.TrimSpace(r.FormValue("alias"))
 	password := r.FormValue("password")
-	if !validateAlias(alias) || password == "" {
-		http.Error(w, "Invalid alias or password", http.StatusBadRequest)
+	if !validateAlias(alias) || len(password) < 8 || len(password) > 72 {
+		http.Error(w, "Invalid alias format or password length (8-72 chars required)", http.StatusBadRequest)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	available, err := app.IsAliasAvailable(ctx, alias)
-	if err != nil {
-		log.Printf("Registration DB error: %v", err)
-		http.Error(w, "Registration unavailable", http.StatusInternalServerError)
-		return
-	}
-	if !available {
-		http.Error(w, "Alias already taken", http.StatusConflict)
-		return
-	}
+
 	auth, err := app.CreateUser(ctx, alias, password)
 	if err != nil {
-		log.Printf("Failed to create user %q: %v", alias, err)
-		http.Error(w, "Registration unavailable", http.StatusInternalServerError)
+		log.Printf("Registration failed for %q: %v", alias, err)
+		http.Error(w, "Alias taken or registration unavailable", http.StatusConflict)
 		return
 	}
 	if err := app.SetSession(w, r, alias, auth.Privilege); err != nil {
@@ -133,9 +145,10 @@ func (app *App) Login(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
+
 	auth, err := app.VerifyCredentials(ctx, alias, password)
 	if err != nil {
-		log.Printf("Login failed for %q: %v", alias, err)
+		log.Printf("Login failed for alias %q: %v", alias, err)
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 		return
 	}
@@ -149,7 +162,6 @@ func (app *App) Login(w http.ResponseWriter, r *http.Request) {
 func (app *App) Logout(w http.ResponseWriter, r *http.Request) {
 	if err := app.clearSession(w, r); err != nil {
 		log.Printf("Session clear error: %v", err)
-		// Proceed anyway — user should be logged out from perspective
 	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }

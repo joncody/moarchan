@@ -1,4 +1,3 @@
-// main.go
 package main
 
 import (
@@ -96,43 +95,56 @@ func (f *FileInfo) Process(uniqueID string) error {
 	fdata, err := dataurl.DecodeString(f.File)
 	if err != nil {
 		log.Println("DataURL decode error:", err)
-		return err
+		return fmt.Errorf("invalid base64 image data: %w", err)
 	}
 
-	// 2. Sanitize filename and prevent overwrite collisions by prefixing uniqueID
+	// 2. Validate file extension whitelist to prevent Stored XSS
+	ext := strings.ToLower(filepath.Ext(f.Name))
+	allowedExts := map[string]bool{
+		".jpg":  true,
+		".jpeg": true,
+		".png":  true,
+		".gif":  true,
+	}
+	if !allowedExts[ext] {
+		return fmt.Errorf("file extension %q is not allowed", ext)
+	}
+
+	// 3. Decode binary header to verify image integrity and format
+	config, format, err := image.DecodeConfig(bytes.NewReader(fdata.Data))
+	if err != nil {
+		log.Println("Image DecodeConfig error:", err)
+		return fmt.Errorf("invalid or corrupted image binary: %w", err)
+	}
+
+	f.Dimensions = fmt.Sprintf("%dx%d", config.Width, config.Height)
+	f.Mime = "image/" + format
+
+	// 4. Sanitize filename and prevent collisions
 	baseName := filepath.Base(f.Name)
 	if baseName == "" || baseName == "." {
-		baseName = "upload.jpg"
+		baseName = "upload" + ext
 	}
 	safeName := fmt.Sprintf("%s_%s", uniqueID, baseName)
 	f.Name = safeName
 	f.Path = fmt.Sprintf("./static/images/uploads/%s", safeName)
 
-	// 3. Ensure upload directory exists
+	// 5. Ensure upload directory exists
 	if err := os.MkdirAll("./static/images/uploads", 0755); err != nil {
 		log.Println("MkdirAll error:", err)
 		return err
 	}
 
-	// 4. Write image file to disk
-	if err := os.WriteFile(f.Path, fdata.Data, 0644); err != nil {
+	// 6. Write image file to disk with strict permissions
+	if err := os.WriteFile(f.Path, fdata.Data, 0600); err != nil {
 		log.Println("WriteFile error:", err)
 		return err
 	}
 
-	// 5. Decode image dimensions directly from binary header bytes
-	config, _, err := image.DecodeConfig(bytes.NewReader(fdata.Data))
-	if err != nil {
-		log.Println("Image DecodeConfig warning:", err)
-		f.Dimensions = "N/A"
-	} else {
-		f.Dimensions = fmt.Sprintf("%dx%d", config.Width, config.Height)
-	}
-
-	// 6. Calculate accurate file size in KB
+	// 7. Calculate file size in KB
 	f.Size = fmt.Sprintf("%.1f", float64(len(fdata.Data))/1024.0)
 
-	// 7. Clear raw base64 payload from memory
+	// 8. Clear raw payload from memory
 	f.File = ""
 	return nil
 }
@@ -174,13 +186,19 @@ func threadHandler(conn *roomer.Conn, msg *roomer.Message) error {
 		return fmt.Errorf("invalid thread payload: missing topic")
 	}
 
+	// Validate topic table name safety
+	if !frame.IsValidTableName(thread.Topic) || frame.IsSystemTable(thread.Topic) {
+		return fmt.Errorf("invalid or restricted topic table: %q", thread.Topic)
+	}
+
 	thread.Unique.Generate()
 	thread.Name = html.EscapeString(thread.Name)
 	thread.Subject = html.EscapeString(thread.Subject)
 	thread.Comment, _ = sanitizeComment(thread.Comment)
 
 	if err := thread.FileInfo.Process(thread.Unique.Hash); err != nil {
-		log.Println("File processing warning:", err)
+		log.Println("File processing error:", err)
+		return fmt.Errorf("file upload failed: %w", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -211,6 +229,11 @@ func replyHandler(conn *roomer.Conn, msg *roomer.Message) error {
 		return fmt.Errorf("invalid reply payload: missing thread or topic")
 	}
 
+	// Validate topic table name safety before raw SQL transaction
+	if !frame.IsValidTableName(reply.Topic) || frame.IsSystemTable(reply.Topic) {
+		return fmt.Errorf("invalid or restricted topic table: %q", reply.Topic)
+	}
+
 	reply.Unique.Generate()
 	reply.Name = html.EscapeString(reply.Name)
 
@@ -219,11 +242,17 @@ func replyHandler(conn *roomer.Conn, msg *roomer.Message) error {
 	reply.Tagging = tags
 
 	if err := reply.FileInfo.Process(reply.Unique.Hash); err != nil {
-		log.Println("File processing warning:", err)
+		log.Println("File processing error:", err)
+		return fmt.Errorf("file upload failed: %w", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
+	// Ensure target table exists safely via memory-cached frame helper
+	if err := app.EnsureTable(ctx, reply.Topic); err != nil {
+		return fmt.Errorf("ensure topic table %q: %w", reply.Topic, err)
+	}
 
 	// Use Transaction + Row Lock (FOR UPDATE) to prevent race condition on concurrent replies
 	tx, err := app.Driver.BeginTx(ctx, nil)

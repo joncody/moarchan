@@ -12,14 +12,37 @@ import (
 
 var validTableNameRegex = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
 
+const defaultMaxRows = 1000
+
+var systemTables = map[string]bool{
+	"auth": true,
+}
+
+// IsValidTableName validates table identifier formatting.
 func IsValidTableName(name string) bool {
 	return validTableNameRegex.MatchString(name)
 }
 
+// IsSystemTable returns true if the table is restricted system metadata.
+func IsSystemTable(table string) bool {
+	lower := strings.ToLower(table)
+	if systemTables[lower] {
+		return true
+	}
+	return strings.HasPrefix(lower, "pg_") || strings.HasPrefix(lower, "information_schema")
+}
+
+// EnsureTable initializes a table if not already created, caching known tables in memory.
 func (app *App) EnsureTable(ctx context.Context, table string) error {
+	// Check memory cache first to avoid runtime DDL lock overhead.
+	if _, loaded := app.knownTables.Load(table); loaded {
+		return nil
+	}
+
 	if !IsValidTableName(table) {
 		return fmt.Errorf("invalid table name: %q", table)
 	}
+
 	const queryTemplate = `
 		CREATE TABLE IF NOT EXISTS "%s" (
 			id BIGSERIAL PRIMARY KEY,
@@ -30,6 +53,8 @@ func (app *App) EnsureTable(ctx context.Context, table string) error {
 	if _, err := app.Driver.ExecContext(ctx, query); err != nil {
 		return fmt.Errorf("ensure table %q: %w", table, err)
 	}
+
+	app.knownTables.Store(table, true)
 	return nil
 }
 
@@ -49,7 +74,7 @@ func (app *App) PrepareTables(ctx context.Context) error {
 	return nil
 }
 
-// ExecTx executes a function inside a database transaction with automatic rollback on error.
+// ExecTx executes a function inside a database transaction with automatic rollback.
 func (app *App) ExecTx(ctx context.Context, fn func(*sql.Tx) error) error {
 	tx, err := app.Driver.BeginTx(ctx, nil)
 	if err != nil {
@@ -103,11 +128,23 @@ func (app *App) GetRowStruct(ctx context.Context, table, key string, dest interf
 }
 
 func (app *App) GetRows(ctx context.Context, table string) ([]map[string]interface{}, error) {
+	return app.GetRowsPaginated(ctx, table, defaultMaxRows, 0)
+}
+
+func (app *App) GetRowsPaginated(ctx context.Context, table string, limit, offset int) ([]map[string]interface{}, error) {
 	if err := app.EnsureTable(ctx, table); err != nil {
 		return nil, err
 	}
-	query := fmt.Sprintf(`SELECT value FROM "%s"`, table)
-	rows, err := app.Driver.QueryContext(ctx, query)
+	if limit <= 0 || limit > 1000 {
+		limit = defaultMaxRows
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	// Deterministic ordering by primary key ID (newest first)
+	query := fmt.Sprintf(`SELECT value FROM "%s" ORDER BY id DESC LIMIT $1 OFFSET $2`, table)
+	rows, err := app.Driver.QueryContext(ctx, query, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("query table %q: %w", table, err)
 	}

@@ -4,14 +4,33 @@ services:
   db:
     image: postgres:16-alpine
     container_name: moarchan-db
+    restart: always
     environment:
-      POSTGRES_USER: moarchan
-      POSTGRES_PASSWORD: moarchan
-      POSTGRES_DB: moarchan
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    # Do NOT expose "5432:5432" to host network in production
+    expose:
+      - "5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+
+  app:
+    build: .
+    container_name: moarchan-app
+    restart: always
+    ports:
+      - "9001:9001"
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      SESSION_HASH_KEY: ${SESSION_HASH_KEY}
+      SESSION_BLOCK_KEY: ${SESSION_BLOCK_KEY}
+    depends_on:
+      - db
 
 volumes:
   pgdata:
