@@ -2,60 +2,87 @@
 
 import roomer from "./roomer.js";
 
-const global = (
-    globalThis !== undefined
-    ? globalThis
-    : (
-        window !== undefined
-        ? window
-        : globalThis
-    )
-);
+function get_global_environment() {
+    if (globalThis !== undefined) {
+        return globalThis;
+    }
+    if (window !== undefined) {
+        return window;
+    }
+    return undefined;
+}
+
+const global_env = get_global_environment();
 
 const decoder = new TextDecoder("utf-8");
 const app = {
+    activeCleanups: [],
     base: document.querySelector("[data-base]"),
     controllers: {},
-    hashmatch: /^#*(.*)$/,
     hash: "/",
+    hashmatch: /^#*(.*)$/,
     hrefs: document.querySelectorAll("[data-href]"),
     retries: 0,
     socket: null
 };
 
 function changehash(event) {
-    global.location.hash = event.currentTarget.dataset.href;
+    if (event && event.currentTarget && event.currentTarget.dataset) {
+        global_env.location.hash = event.currentTarget.dataset.href;
+    }
 }
 
 function assignHrefs() {
-    app.hrefs.forEach((el) => el.removeEventListener("click", changehash));
+    app.hrefs.forEach(function (el) {
+        el.removeEventListener("click", changehash);
+    });
     app.hrefs = document.querySelectorAll("[data-href]");
-    app.hrefs.forEach((el) => el.addEventListener("click", changehash));
+    app.hrefs.forEach(function (el) {
+        el.addEventListener("click", changehash);
+    });
 }
 
 app.assignHrefs = assignHrefs;
 
-global.addEventListener("hashchange", function () {
-    const hash = app.hashmatch.exec(global.location.hash)[1];
+function runCleanups() {
+    if (Array.isArray(app.activeCleanups)) {
+        app.activeCleanups.forEach(function (fn) {
+            if (typeof fn === "function") {
+                fn();
+            }
+        });
+    }
+    app.activeCleanups = [];
+}
+
+global_env.addEventListener("hashchange", function () {
+    const match = app.hashmatch.exec(global_env.location.hash);
+    const hash = (match && match[1]) ? match[1] : "/";
 
     if (hash !== app.hash) {
         app.hash = hash;
-        app.socket.send("request", app.hash);
+        if (app.socket && typeof app.socket.send === "function") {
+            app.socket.send("request", app.hash);
+        }
     }
 });
 
 (function init() {
-    app.socket = roomer((
-        global.location.protocol === "https:"
+    const protocol = (
+        global_env.location.protocol === "https:"
         ? "wss:"
         : "ws:"
-    ) + "//" + global.location.host + "/ws");
+    );
+    app.socket = roomer(
+        protocol + "//" + global_env.location.host + "/ws"
+    );
 
     app.socket.on("open", function () {
         app.retries = 0;
-        app.hash = app.hashmatch.exec(global.location.hash)[1];
+        const match = app.hashmatch.exec(global_env.location.hash);
+        app.hash = (match && match[1]) ? match[1] : "";
         if (!app.hash) {
-            global.location.hash = "/";
+            global_env.location.hash = "/";
             app.hash = "/";
         }
         app.socket.send("request", app.hash);
@@ -63,23 +90,71 @@ global.addEventListener("hashchange", function () {
 
     app.socket.on("close", function () {
         if (app.retries < 10) {
-            global.setTimeout(init, 3000);
+            global_env.setTimeout(init, 3000);
         }
         app.retries += 1;
     });
 
     app.socket.on("response", function (payload) {
-        const msg = JSON.parse(decoder.decode(payload));
+        let msg;
+        try {
+            msg = JSON.parse(decoder.decode(payload));
+        } catch (err) {
+            return;
+        }
+
+        runCleanups();
+
+        if (typeof app.socket.purge === "function") {
+            app.socket.purge();
+        }
 
         app.base.innerHTML = msg.template;
         assignHrefs();
-        if (msg.controllers) {
+
+        if (Array.isArray(msg.controllers)) {
             msg.controllers.forEach(function (c) {
-                if (app.controllers.hasOwnProperty(c)) {
-                    app.controllers[c](global, msg.template);
+                if (
+                    Object.prototype.hasOwnProperty.call(
+                        app.controllers,
+                        c
+                    )
+                ) {
+                    const cleanupFn = app.controllers[c](
+                        global_env,
+                        msg.template
+                    );
+                    if (typeof cleanupFn === "function") {
+                        app.activeCleanups.push(cleanupFn);
+                    }
                 }
             });
         }
+    });
+
+    app.socket.on("error", function (payload) {
+        let errData;
+        try {
+            errData = JSON.parse(decoder.decode(payload));
+        } catch (err) {
+            errData = { error: "An unexpected error occurred." };
+        }
+
+        runCleanups();
+
+        if (typeof app.socket.purge === "function") {
+            app.socket.purge();
+        }
+
+        app.base.innerHTML = (
+            "<div class=\"page\"><div class=\"pink-section\">" +
+            "<h3 class=\"box-header pink-header\">Error " +
+            (errData.status || 500) +
+            "</h3><p class=\"box-message\">" +
+            (errData.error || "An unexpected error occurred.") +
+            "</p></div></div>"
+        );
+        assignHrefs();
     });
 }());
 

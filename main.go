@@ -73,17 +73,28 @@ type FileInfo struct {
 
 func sanitizeComment(raw string) (string, []string) {
 	escaped := html.EscapeString(raw)
-	escaped = strings.ReplaceAll(escaped, "\r\n", "<br />")
-	escaped = strings.ReplaceAll(escaped, "\n", "<br />")
+	escaped = strings.ReplaceAll(escaped, "\r\n", "\n")
 
 	var tags []string
-	formatted := tagRegex.ReplaceAllStringFunc(escaped, func(match string) string {
-		postHash := match[8:] // strip &gt;&gt;
-		tags = append(tags, postHash)
-		return fmt.Sprintf(`<span class="post-tag blue-text-link" data-tag="%s">%s</span>`, postHash, match)
-	})
+	lines := strings.Split(escaped, "\n")
+	formattedLines := make([]string, 0, len(lines))
 
-	return formatted, tags
+	for _, line := range lines {
+		formattedLine := tagRegex.ReplaceAllStringFunc(line, func(match string) string {
+			postHash := match[8:] // strip &gt;&gt;
+			tags = append(tags, postHash)
+			return fmt.Sprintf(`<span class="post-tag blue-text-link" data-tag="%s">%s</span>`, postHash, match)
+		})
+
+		// Format greentext lines (>quote)
+		if strings.HasPrefix(formattedLine, "&gt;") && !strings.HasPrefix(formattedLine, "&gt;&gt;") {
+			formattedLine = fmt.Sprintf(`<span class="post-quote">%s</span>`, formattedLine)
+		}
+
+		formattedLines = append(formattedLines, formattedLine)
+	}
+
+	return strings.Join(formattedLines, "<br />"), tags
 }
 
 func (f *FileInfo) Process(uniqueID string) error {
@@ -184,6 +195,9 @@ func threadHandler(conn *roomer.Conn, msg *roomer.Message) error {
 	}
 	if thread.Topic == "" {
 		return fmt.Errorf("invalid thread payload: missing topic")
+	}
+	if thread.FileInfo.File == "" {
+		return fmt.Errorf("image file required to post a new thread")
 	}
 
 	// Validate topic table name safety

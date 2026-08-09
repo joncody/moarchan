@@ -13,7 +13,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
+    "time"
 
 	"github.com/gorilla/mux"
 	"github.com/joncody/roomer"
@@ -169,6 +169,7 @@ func (app *App) Render(c *roomer.Conn, msg *roomer.Message, tmpl string, control
 	var buf bytes.Buffer
 	if err := app.Templates.ExecuteTemplate(&buf, tmpl, data); err != nil {
 		log.Printf("Render error (%s): %v", tmpl, err)
+		app.sendErrorResponse(c, msg, http.StatusInternalServerError, "Internal template render error")
 		return
 	}
 	cleanCtrls := make([]string, 0, len(controllers))
@@ -184,12 +185,9 @@ func (app *App) Render(c *roomer.Conn, msg *roomer.Message, tmpl string, control
 	payload, err := json.Marshal(resp)
 	if err != nil {
 		log.Printf("JSON marshal error: %v", err)
+		app.sendErrorResponse(c, msg, http.StatusInternalServerError, "Internal response serialization error")
 		return
 	}
-	msg.Event = "response"
-	msg.EventLength = len(msg.Event)
-	msg.Payload = payload
-	msg.PayloadLength = len(payload)
 	c.SendToClient(c.ID, "response", payload)
 }
 
@@ -275,10 +273,6 @@ func (app *App) sendErrorResponse(c *roomer.Conn, msg *roomer.Message, status in
 		"status": status,
 	}
 	payload, _ := json.Marshal(resp)
-	msg.Event = "error"
-	msg.EventLength = len(msg.Event)
-	msg.Payload = payload
-	msg.PayloadLength = len(payload)
 	c.SendToClient(c.ID, "error", payload)
 }
 
@@ -315,6 +309,8 @@ func (app *App) ProcessRequest(c *roomer.Conn, msg *roomer.Message) error {
 	data, err := app.ResolveRouteData(ctx, cfg, subs)
 	if err != nil {
 		log.Printf("Route data error (%s): %v", path, err)
+		app.sendErrorResponse(c, msg, http.StatusNotFound, fmt.Sprintf("Data not found for route: %s", path))
+		return fmt.Errorf("data error (%s): %w", path, err)
 	}
 
 	// 5. Render response

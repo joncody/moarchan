@@ -13,7 +13,17 @@ function getNode(e, node) {
     return dom();
 }
 
+function getFirstData(node, key) {
+    const targetNode = getNode(null, node);
+    const dataVal = targetNode.data(key);
+    if (Array.isArray(dataVal)) {
+        return dataVal[0];
+    }
+    return dataVal;
+}
+
 frame.controllers.service = function service(global, view) {
+    void view;
     const topicsMap = {
         "3": "3DCG",
         "a": "Anime & Manga",
@@ -133,8 +143,10 @@ frame.controllers.service = function service(global, view) {
         if (e && typeof e.preventDefault === "function") {
             e.preventDefault();
         }
-        const targetNode = getNode(e, node);
-        dom("#post-" + targetNode.data("post")).toggleClass("hide-thread");
+        const hash = getFirstData(getNode(e, node), "post");
+        if (hash) {
+            dom("#post-" + hash).toggleClass("hide-thread");
+        }
     }
     dom(".post-show-hide-thread").on("click", toggleThread, false);
 
@@ -142,8 +154,10 @@ frame.controllers.service = function service(global, view) {
         if (e && typeof e.preventDefault === "function") {
             e.preventDefault();
         }
-        const targetNode = getNode(e, node);
-        const hash = targetNode.data("post");
+        const hash = getFirstData(getNode(e, node), "post");
+        if (!hash) {
+            return;
+        }
         const thread = dom("#post-" + hash);
         const replies = thread.select(".reply-container");
 
@@ -170,8 +184,10 @@ frame.controllers.service = function service(global, view) {
         if (e && typeof e.preventDefault === "function") {
             e.preventDefault();
         }
-        const targetNode = getNode(e, node);
-        const hash = targetNode.data("post");
+        const hash = getFirstData(getNode(e, node), "post");
+        if (!hash) {
+            return;
+        }
         const post = dom("#post-" + hash);
         if (post.hasClass("thread")) {
             post.addClass("hide-thread");
@@ -186,8 +202,10 @@ frame.controllers.service = function service(global, view) {
         if (e && typeof e.preventDefault === "function") {
             e.preventDefault();
         }
-        const targetNode = getNode(e, node);
-        const hash = targetNode.data("post");
+        const hash = getFirstData(getNode(e, node), "post");
+        if (!hash) {
+            return;
+        }
         const post = dom("#post-" + hash);
         if (post.hasClass("thread")) {
             post.removeClass("hide-thread");
@@ -209,8 +227,10 @@ frame.controllers.service = function service(global, view) {
         if (e && typeof e.preventDefault === "function") {
             e.preventDefault();
         }
-        const targetNode = getNode(e, node);
-        const hash = targetNode.data("post");
+        const hash = getFirstData(getNode(e, node), "post");
+        if (!hash) {
+            return;
+        }
         const menu = dom("#post-menu-" + hash);
         dom(".post-options-menu").addClass("hide");
         menu.removeClass("hide");
@@ -272,7 +292,7 @@ frame.controllers.service = function service(global, view) {
         const rawCom = (commentInput && commentInput.value) || "";
 
         const schema = {
-            comment: rawCom, // Send raw plain text
+            comment: rawCom,
             file_mime: file.type,
             file_name: file.name,
             name: rawName,
@@ -300,9 +320,10 @@ frame.controllers.service = function service(global, view) {
         }
         const replyboxVisible = dom(".reply-box").hasClass("hide") === false;
         const activeThreadList = replyBox.data("thread");
+        const activeThread = Array.isArray(activeThreadList) ? activeThreadList[0] : activeThreadList;
         const thread = (
-            (replyboxVisible && activeThreadList)
-            ? activeThreadList[0]
+            (replyboxVisible && activeThread)
+            ? activeThread
             : hashsplit[3]
         );
 
@@ -334,7 +355,6 @@ frame.controllers.service = function service(global, view) {
         const rawName = (nameInput && nameInput.value) || "Anonymous";
         const rawOpt = (optionsInput && optionsInput.value) || "";
 
-        // Send raw comment plain text — backend will sanitize and format quote tags
         const schema = {
             comment: rawComment,
             name: rawName,
@@ -411,9 +431,8 @@ frame.controllers.service = function service(global, view) {
         if (e && typeof e.preventDefault === "function") {
             e.preventDefault();
         }
-        const targetNode = getNode(e, node);
-        const thread = targetNode.data("thread");
-        const post = targetNode.html()[0] || "";
+        const thread = getFirstData(getNode(e, node), "thread");
+        const post = getNode(e, node).html()[0] || "";
 
         replyBox.data("thread", thread);
         replyBoxHeaderText.html(thread).attr("title", thread);
@@ -462,9 +481,7 @@ frame.controllers.service = function service(global, view) {
     }
 
     function goToTaggedPost(e) {
-        const targetNode = dom(e.currentTarget);
-        const tagList = targetNode.data("tag");
-        const tag = (tagList) ? tagList[0] : null;
+        const tag = getFirstData(e.currentTarget, "tag");
         if (!tag) {
             return;
         }
@@ -486,9 +503,7 @@ frame.controllers.service = function service(global, view) {
     }
 
     function hoverOutTag(e) {
-        const targetNode = dom(e.currentTarget);
-        const tagList = targetNode.data("tag");
-        const tag = (tagList) ? tagList[0] : null;
+        const tag = getFirstData(e.currentTarget, "tag");
         if (tag) {
             const tagged = dom("#post-" + tag);
             tagged.removeClass("highlight-hover");
@@ -497,9 +512,7 @@ frame.controllers.service = function service(global, view) {
     }
 
     function hoverOverTag(e) {
-        const targetNode = dom(e.currentTarget);
-        const tagList = targetNode.data("tag");
-        const tag = (tagList) ? tagList[0] : null;
+        const tag = getFirstData(e.currentTarget, "tag");
         if (!tag) {
             return;
         }
@@ -521,7 +534,7 @@ frame.controllers.service = function service(global, view) {
 
         if (inview) {
             tagged.addClass("highlight-hover");
-            targetNode.once("mouseout", hoverOutTag, false);
+            dom(e.currentTarget).once("mouseout", hoverOutTag, false);
         } else {
             dom(".tag-hover-clone").remove();
 
@@ -537,7 +550,7 @@ frame.controllers.service = function service(global, view) {
             if (cloneEl) {
                 document.body.appendChild(cloneEl);
             }
-            targetNode.once("mouseout", hoverOutTag, false);
+            dom(e.currentTarget).once("mouseout", hoverOutTag, false);
         }
     }
 
@@ -734,6 +747,15 @@ frame.controllers.service = function service(global, view) {
         initReplies(data.thread);
     }
 
+    room.off("new-reply", addReply);
+    room.off("new-thread", addThread);
     room.on("new-reply", addReply);
     room.on("new-thread", addThread);
+
+    return function cleanup() {
+        room.off("new-reply", addReply);
+        room.off("new-thread", addThread);
+        dom(document.body).off("mousemove", dragging, false);
+        dom(document.body).off("click");
+    };
 };
