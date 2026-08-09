@@ -12,6 +12,8 @@ github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aN
 github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/joncody/roomer v0.0.0-20260808203502-1e6ad1fe4f15 h1:juZWjJoc1Xxx8DpJGmnlrKztZ4xvBy2v/9KL4gJB/kQ=
 github.com/joncody/roomer v0.0.0-20260808203502-1e6ad1fe4f15/go.mod h1:Kaj0TEuSYKcrc93cQCfMyaNS34FAtmoQY3bFOOljBos=
+github.com/joncody/roomer v0.0.0-20260809173856-0a425f4416f0 h1:n9hdt3oB4sVg0rtr6mAWQ/u5s8VhLBjwXJGreDWwp8w=
+github.com/joncody/roomer v0.0.0-20260809173856-0a425f4416f0/go.mod h1:Kaj0TEuSYKcrc93cQCfMyaNS34FAtmoQY3bFOOljBos=
 github.com/lib/pq v1.12.3 h1:tTWxr2YLKwIvK90ZXEw8GP7UFHtcbTtty8zsI+YjrfQ=
 github.com/lib/pq v1.12.3/go.mod h1:/p+8NSbOcwzAEI7wiMXFlgydTwcgTr3OSKMsD2BitpA=
 github.com/vincent-petithory/dataurl v1.0.0 h1:cXw+kPto8NLuJtlMsI152irrVw9fRDX8AbShPRpg2CI=
