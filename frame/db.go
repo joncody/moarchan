@@ -49,6 +49,20 @@ func (app *App) PrepareTables(ctx context.Context) error {
 	return nil
 }
 
+// ExecTx executes a function inside a database transaction with automatic rollback on error.
+func (app *App) ExecTx(ctx context.Context, fn func(*sql.Tx) error) error {
+	tx, err := app.Driver.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	if err := fn(tx); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (app *App) GetRow(ctx context.Context, table, key string) (map[string]interface{}, error) {
 	if err := app.EnsureTable(ctx, table); err != nil {
 		return nil, err
@@ -64,12 +78,6 @@ func (app *App) GetRow(ctx context.Context, table, key string) (map[string]inter
 	}
 	var result map[string]interface{}
 	if err := json.Unmarshal(value, &result); err != nil {
-		var strValue string
-		if errStr := json.Unmarshal(value, &strValue); errStr == nil {
-			if errInner := json.Unmarshal([]byte(strValue), &result); errInner == nil {
-				return result, nil
-			}
-		}
 		return nil, fmt.Errorf("unmarshal JSON from %q (key=%q): %w", table, key, err)
 	}
 	return result, nil
@@ -89,12 +97,6 @@ func (app *App) GetRowStruct(ctx context.Context, table, key string, dest interf
 		return fmt.Errorf("query row in %q: %w", table, err)
 	}
 	if err := json.Unmarshal(value, dest); err != nil {
-		var strValue string
-		if errStr := json.Unmarshal(value, &strValue); errStr == nil {
-			if errInner := json.Unmarshal([]byte(strValue), dest); errInner == nil {
-				return nil
-			}
-		}
 		return fmt.Errorf("unmarshal JSON from %q (key=%q): %w", table, key, err)
 	}
 	return nil
@@ -110,6 +112,7 @@ func (app *App) GetRows(ctx context.Context, table string) ([]map[string]interfa
 		return nil, fmt.Errorf("query table %q: %w", table, err)
 	}
 	defer rows.Close()
+
 	results := make([]map[string]interface{}, 0)
 	for rows.Next() {
 		var value []byte
@@ -118,13 +121,6 @@ func (app *App) GetRows(ctx context.Context, table string) ([]map[string]interfa
 		}
 		var entry map[string]interface{}
 		if err := json.Unmarshal(value, &entry); err != nil {
-			var strValue string
-			if errStr := json.Unmarshal(value, &strValue); errStr == nil {
-				if errInner := json.Unmarshal([]byte(strValue), &entry); errInner == nil {
-					results = append(results, entry)
-					continue
-				}
-			}
 			return nil, fmt.Errorf("unmarshal row in %q: %w", table, err)
 		}
 		results = append(results, entry)
@@ -146,8 +142,6 @@ func (app *App) InsertRow(ctx context.Context, table, key string, value interfac
 		data = v
 	case json.RawMessage:
 		data = v
-	case string:
-		data = []byte(v)
 	default:
 		data, err = json.Marshal(v)
 		if err != nil {

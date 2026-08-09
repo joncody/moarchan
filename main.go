@@ -5,8 +5,11 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"html"
 	"image"
 	_ "image/gif"
 	_ "image/jpeg"
@@ -14,6 +17,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,6 +28,7 @@ import (
 )
 
 var app *frame.App
+var tagRegex = regexp.MustCompile(`&gt;&gt;([A-Za-z0-9]+)`)
 
 type Thread struct {
 	Type     string           `json:"type"`
@@ -66,7 +72,22 @@ type FileInfo struct {
 	Dimensions string `json:"file_dimensions"`
 }
 
-func (f *FileInfo) Process() error {
+func sanitizeComment(raw string) (string, []string) {
+	escaped := html.EscapeString(raw)
+	escaped = strings.ReplaceAll(escaped, "\r\n", "<br />")
+	escaped = strings.ReplaceAll(escaped, "\n", "<br />")
+
+	var tags []string
+	formatted := tagRegex.ReplaceAllStringFunc(escaped, func(match string) string {
+		postHash := match[8:] // strip &gt;&gt;
+		tags = append(tags, postHash)
+		return fmt.Sprintf(`<span class="post-tag blue-text-link" data-tag="%s">%s</span>`, postHash, match)
+	})
+
+	return formatted, tags
+}
+
+func (f *FileInfo) Process(uniqueID string) error {
 	if f.File == "" {
 		return nil
 	}
@@ -78,11 +99,12 @@ func (f *FileInfo) Process() error {
 		return err
 	}
 
-	// 2. Sanitize filename to prevent path traversal
-	safeName := filepath.Base(f.Name)
-	if safeName == "" || safeName == "." {
-		safeName = fmt.Sprintf("upload_%d.jpg", time.Now().UnixNano())
+	// 2. Sanitize filename and prevent overwrite collisions by prefixing uniqueID
+	baseName := filepath.Base(f.Name)
+	if baseName == "" || baseName == "." {
+		baseName = "upload.jpg"
 	}
+	safeName := fmt.Sprintf("%s_%s", uniqueID, baseName)
 	f.Name = safeName
 	f.Path = fmt.Sprintf("./static/images/uploads/%s", safeName)
 
@@ -145,14 +167,19 @@ func threadHandler(conn *roomer.Conn, msg *roomer.Message) error {
 	var thread Thread
 	err := json.Unmarshal(msg.Payload, &thread)
 	if err != nil {
-		log.Println(err)
+		log.Println("Unmarshal error:", err)
 		return err
 	}
 	if thread.Topic == "" {
 		return fmt.Errorf("invalid thread payload: missing topic")
 	}
+
 	thread.Unique.Generate()
-	if err := thread.FileInfo.Process(); err != nil {
+	thread.Name = html.EscapeString(thread.Name)
+	thread.Subject = html.EscapeString(thread.Subject)
+	thread.Comment, _ = sanitizeComment(thread.Comment)
+
+	if err := thread.FileInfo.Process(thread.Unique.Hash); err != nil {
 		log.Println("File processing warning:", err)
 	}
 
@@ -177,23 +204,46 @@ func replyHandler(conn *roomer.Conn, msg *roomer.Message) error {
 	var reply Reply
 	err := json.Unmarshal(msg.Payload, &reply)
 	if err != nil {
-		log.Println(err)
+		log.Println("Unmarshal error:", err)
 		return err
 	}
 	if reply.Thread == "" || reply.Topic == "" {
 		return fmt.Errorf("invalid reply payload: missing thread or topic")
 	}
+
 	reply.Unique.Generate()
-	if err := reply.FileInfo.Process(); err != nil {
+	reply.Name = html.EscapeString(reply.Name)
+
+	var tags []string
+	reply.Comment, tags = sanitizeComment(reply.Comment)
+	reply.Tagging = tags
+
+	if err := reply.FileInfo.Process(reply.Unique.Hash); err != nil {
 		log.Println("File processing warning:", err)
 	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	var thread Thread
-	if err := app.GetRowStruct(ctx, reply.Topic, reply.Thread, &thread); err != nil {
-		log.Println(err)
+	// Use Transaction + Row Lock (FOR UPDATE) to prevent race condition on concurrent replies
+	tx, err := app.Driver.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	var value []byte
+	query := fmt.Sprintf(`SELECT value FROM "%s" WHERE key = $1 FOR UPDATE`, reply.Topic)
+	if err := tx.QueryRowContext(ctx, query, reply.Thread).Scan(&value); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("thread %q not found in topic %q", reply.Thread, reply.Topic)
+		}
 		return err
+	}
+
+	var thread Thread
+	if err := json.Unmarshal(value, &thread); err != nil {
+		return fmt.Errorf("unmarshal thread: %w", err)
 	}
 
 	if thread.Replies == nil {
@@ -210,9 +260,23 @@ func replyHandler(conn *roomer.Conn, msg *roomer.Message) error {
 		}
 	}
 
-	if err := app.InsertRow(ctx, reply.Topic, reply.Thread, &thread); err != nil {
-		log.Println(err)
-		return err
+	updatedData, err := json.Marshal(&thread)
+	if err != nil {
+		return fmt.Errorf("marshal updated thread: %w", err)
+	}
+
+	upsertQuery := fmt.Sprintf(`
+		INSERT INTO "%s" (key, value)
+		VALUES ($1, $2)
+		ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+		reply.Topic)
+
+	if _, err := tx.ExecContext(ctx, upsertQuery, reply.Thread, updatedData); err != nil {
+		return fmt.Errorf("upsert thread: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
 	}
 
 	payload, err := json.Marshal(&reply)

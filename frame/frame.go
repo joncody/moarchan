@@ -20,26 +20,21 @@ import (
 	_ "github.com/lib/pq"
 )
 
-// DBConfig holds database connection info.
 type DBConfig struct {
 	User     string `json:"user"`
 	Password string `json:"password"`
 	Name     string `json:"name"`
 }
 
-const (
-	MinHashKeyLen  = 32
-	MinBlockKeyLen = 32
-)
-
 type AppConfig struct {
-	Name     string   `json:"name"`
-	HashKey  string   `json:"hashkey"`
-	BlockKey string   `json:"blockkey"`
-	Port     string   `json:"port"`
-	SSLPort  string   `json:"sslport"`
-	Database DBConfig `json:"database"`
-	Routes   []Route  `json:"routes"`
+	Name         string   `json:"name"`
+	HashKey      string   `json:"hashkey"`
+	BlockKey     string   `json:"blockkey"`
+	Port         string   `json:"port"`
+	SSLPort      string   `json:"sslport"`
+	ViewsPattern string   `json:"views_pattern,omitempty"`
+	Database     DBConfig `json:"database"`
+	Routes       []Route  `json:"routes"`
 }
 
 type App struct {
@@ -52,49 +47,43 @@ type App struct {
 	Router         *mux.Router
 }
 
-func logFatalIfErr(err error) {
-	if err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatal(err)
-	}
-}
-
 func (app *App) Start() error {
-	// Build DB connection string
 	dbstring := fmt.Sprintf(
 		"user=%s password=%s dbname=%s sslmode=disable",
 		app.AppConfig.Database.User, app.AppConfig.Database.Password, app.AppConfig.Database.Name,
 	)
-	// Open DB
 	db, err := sql.Open("postgres", dbstring)
 	if err != nil {
 		return fmt.Errorf("open DB: %w", err)
 	}
+
+	// Configure DB Connection Pool
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(10)
+	db.SetConnMaxLifetime(5 * time.Minute)
+
 	app.Driver = db
-	// Ping DB to ensure connectivity
-	ctx := context.Background()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	if err := db.PingContext(ctx); err != nil {
 		db.Close()
 		return fmt.Errorf("ping DB: %w", err)
 	}
-	// Prepare tables
+
 	if err := app.PrepareTables(ctx); err != nil {
 		db.Close()
 		return fmt.Errorf("prepare tables: %w", err)
 	}
-	if app.AppConfig.SSLPort != "" && app.AppConfig.SSLPort != "0" {
-		go func() {
-			addr := ":" + app.AppConfig.SSLPort
-			log.Printf("Starting HTTPS server on %s", addr)
-			if err := http.ListenAndServeTLS(addr, "server.crt", "server.key", app.Router); err != nil {
-				logFatalIfErr(fmt.Errorf("HTTPS server failed on %s: %w", addr, err))
-			}
-		}()
-	}
 
 	addr := ":" + app.AppConfig.Port
 	srv := &http.Server{
-		Addr:    addr,
-		Handler: app.Router,
+		Addr:         addr,
+		Handler:      app.Router,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
 
 	stop := make(chan os.Signal, 1)
@@ -110,8 +99,8 @@ func (app *App) Start() error {
 	<-stop
 	log.Println("Shutting down server gracefully...")
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Printf("HTTP server shutdown error: %v", err)
@@ -130,9 +119,10 @@ func (app *App) Close() error {
 func NewApp(configPath string) (*App, error) {
 	app := &App{
 		AppConfig: AppConfig{
-			Name:    "frame",
-			Port:    "8080",
-			SSLPort: "0",
+			Name:         "frame",
+			Port:         "8080",
+			SSLPort:      "0",
+			ViewsPattern: "./static/views/*",
 			Database: DBConfig{
 				User:     "dbuser",
 				Password: "dbpass",
@@ -151,26 +141,31 @@ func NewApp(configPath string) (*App, error) {
 		}
 		app.AppConfig = cfg
 	}
-	// Setup session store
+
+	if app.AppConfig.ViewsPattern == "" {
+		app.AppConfig.ViewsPattern = "./static/views/*"
+	}
+
 	secure := app.AppConfig.SSLPort != "" && app.AppConfig.SSLPort != "0"
 	store, err := NewSessionStore(app.AppConfig.Name, app.AppConfig.HashKey, app.AppConfig.BlockKey, secure)
 	if err != nil {
 		return nil, fmt.Errorf("session store: %w", err)
 	}
 	app.SessionStore = store
-	// Parse templates
-	app.Templates, err = template.New("").Funcs(TemplateFuncs).ParseGlob("./static/views/*")
+
+	app.Templates, err = template.New("").Funcs(TemplateFuncs).ParseGlob(app.AppConfig.ViewsPattern)
 	if err != nil {
 		return nil, fmt.Errorf("parse templates: %w", err)
 	}
-	// Setup routes
+
 	app.Router, err = app.SetupRoutes()
 	if err != nil {
 		return nil, fmt.Errorf("setup routes: %w", err)
 	}
-	// WebSocket event
+
 	if err := roomer.RegisterHandler("request", app.ProcessRequest); err != nil {
 		log.Fatal("Failed to register handler:", err)
 	}
+
 	return app, nil
 }

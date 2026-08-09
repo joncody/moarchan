@@ -3,18 +3,6 @@ import frame from "../frame.js";
 
 const decoder = new TextDecoder("utf-8");
 
-function escapeHTML(str) {
-    if (typeof str !== "string") {
-        return "";
-    }
-    return str
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-}
-
 function getNode(e, node) {
     if (node && typeof node.data === "function") {
         return node;
@@ -274,8 +262,8 @@ frame.controllers.service = function service(global, view) {
 
         const file = files[0];
 
-        if (file.size > 1024 * 1024 * 1024) {
-            return global.alert("File size exceeds maximum allowed limit of 1 GB.");
+        if (file.size > 32 * 1024 * 1024) {
+            return global.alert("File size exceeds maximum allowed limit of 32 MB.");
         }
 
         const rawName = (nameInput && nameInput.value) || "Anonymous";
@@ -284,13 +272,13 @@ frame.controllers.service = function service(global, view) {
         const rawCom = (commentInput && commentInput.value) || "";
 
         const schema = {
-            comment: escapeHTML(rawCom).replace(/\r?\n/g, "<br />"),
+            comment: rawCom, // Send raw plain text
             file_mime: file.type,
-            file_name: escapeHTML(file.name),
-            name: escapeHTML(rawName),
-            options: escapeHTML(rawOpt),
+            file_name: file.name,
+            name: rawName,
+            options: rawOpt,
             replies: {},
-            subject: escapeHTML(rawSub),
+            subject: rawSub,
             taggedBy: [],
             tagging: [],
             topic: hashsplit[1],
@@ -346,28 +334,17 @@ frame.controllers.service = function service(global, view) {
         const rawName = (nameInput && nameInput.value) || "Anonymous";
         const rawOpt = (optionsInput && optionsInput.value) || "";
 
+        // Send raw comment plain text — backend will sanitize and format quote tags
         const schema = {
-            name: escapeHTML(rawName),
-            options: escapeHTML(rawOpt),
+            comment: rawComment,
+            name: rawName,
+            options: rawOpt,
             taggedBy: [],
             tagging: [],
             thread,
             topic: hashsplit[1],
             type: "reply"
         };
-
-        schema.comment = escapeHTML(rawComment)
-            .replace(/\r?\n/g, "<br />")
-            .replace(/&gt;&gt;(\w+)/g, function (match, postHash) {
-                schema.tagging.push(postHash);
-                return (
-                    "<span class=\"post-tag blue-text-link\" data-tag=\"" +
-                    postHash +
-                    "\">" +
-                    match +
-                    "</span>"
-                );
-            });
 
         function submitReply() {
             room.send("new-reply", JSON.stringify(schema));
@@ -376,7 +353,7 @@ frame.controllers.service = function service(global, view) {
 
         if (files.length > 0) {
             const file = files[0];
-            schema.file_name = escapeHTML(file.name);
+            schema.file_name = file.name;
             schema.file_mime = file.type;
 
             const reader = new FileReader();
@@ -589,13 +566,13 @@ frame.controllers.service = function service(global, view) {
             return;
         }
 
-        const subject = escapeHTML(data.subject || "");
-        const name = escapeHTML(data.name || "Anonymous");
-        const file_name = escapeHTML(data.file_name || "");
+        const subject = data.subject || "";
+        const name = data.name || "Anonymous";
+        const file_name = data.file_name || "";
         const file_size = data.file_size || "0";
-        const file_dimensions = escapeHTML(data.file_dimensions || "???x???");
+        const file_dimensions = data.file_dimensions || "???x???";
         const comment = data.comment || "";
-        const timestamp = escapeHTML(data.timestamp || new Date().toISOString());
+        const timestamp = data.timestamp || new Date().toISOString();
 
         const htmlString = [
             "<div id=\"post-", data.hash, "\" class=\"thread\">",
@@ -695,9 +672,9 @@ frame.controllers.service = function service(global, view) {
         let fileNameEscaped = "";
         let fileBlock = "";
         if (data.file_name) {
-            fileNameEscaped = escapeHTML(data.file_name);
+            fileNameEscaped = data.file_name;
             const fileSizeKb = data.file_size || "0";
-            const dims = escapeHTML(data.file_dimensions || "???x???");
+            const dims = data.file_dimensions || "???x???";
             fileBlock = [
                 "<div class=\"post-image-metadata\">",
                 "File: <a class=\"post-image-link blue-text-link\" href=\"/static/images/uploads/", fileNameEscaped, "\" alt=\"", fileNameEscaped, "\" title=\"", fileNameEscaped, "\" target=\"_blank\">", fileNameEscaped, "</a>",
@@ -721,8 +698,8 @@ frame.controllers.service = function service(global, view) {
             "<div id=\"post-", data.hash, "\" class=\"reply\">",
             "<div class=\"post-header\">",
             "<input class=\"post-checkbox\" type=\"checkbox\" />",
-            "<span class=\"post-username\">", escapeHTML(data.name || "Anonymous"), "</span>",
-            "<span class=\"post-date\">", escapeHTML(data.timestamp || new Date().toISOString()), "</span>",
+            "<span class=\"post-username\">", (data.name || "Anonymous"), "</span>",
+            "<span class=\"post-date\">", (data.timestamp || new Date().toISOString()), "</span>",
             "<span class=\"post-link-to red-text-link\" title=\"Link to this post\">No.</span>",
             "<span class=\"post-reply-to red-text-link\" title=\"Reply to this post\" data-thread=\"", data.thread, "\">", data.hash, "</span>",
             "<div class=\"post-options\" title=\"Post menu\">",

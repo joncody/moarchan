@@ -110,7 +110,8 @@ func (app *App) SetupRoutes() (*mux.Router, error) {
 	router.HandleFunc("/logout", app.Logout).Methods("POST")
 	router.HandleFunc("/ws", roomer.SocketHandlerWithOptions(
         roomer.WithAuthorize(app.GetSessionValues),
-        roomer.WithMaxMessageSize(1024 * 1024 * 1024),
+		roomer.WithMaxMessageSize(32 * 1024 * 1024), // 32MB max message limit for image uploads
+		roomer.WithBufferSizes(16384, 16384),        // Optimized 16KB WebSocket IO buffers
     )).Methods("GET")
 	router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("./static/"))))
 	router.PathPrefix("/").HandlerFunc(app.baseHandler).Methods("GET")
