@@ -1,11 +1,7 @@
-"use strict";
-
 import dom from "./dom.js";
 import frame from "./frame.js";
 
 frame.controllers.auth = function (global) {
-    "use strict";
-
     // ================ Event Handlers ================
 
     function handleLogin(e) {
