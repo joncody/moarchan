@@ -1,0 +1,88 @@
+# ==========================================
+# MOARCHAN / UPLOADS & LOCAL DATA
+# ==========================================
+# Ignore uploaded files, but keep the directory and .gitkeep
+static/images/uploads/*
+!static/images/uploads/.gitkeep
+
+# Ignore local database storage and Docker data
+pgdata/
+*.db
+*.sqlite
+*.sqlite3
+
+# ==========================================
+# SECRETS & ENVIRONMENT CONFIGURATION
+# ==========================================
+# Ignore local environment files containing secrets
+.env
+.env.local
+*.env
+*.pem
+*.key
+
+# ==========================================
+# GO COMPILED BINARIES & BUILD OUTPUTS
+# ==========================================
+# Main application binary
+moarchan
+app
+
+# Architecture binaries & dynamic libraries
+*.exe
+*.exe?
+*.dll
+*.so
+*.dylib
+
+# Test & profiling binaries
+*.test
+*.out
+*.prof
+bin/
+dist/
+
+# ==========================================
+# LOGS & TEMPORARY FILES
+# ==========================================
+*.log
+tmp/
+temp/
+
+# ==========================================
+# OS & SYSTEM FILES
+# ==========================================
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# ==========================================
+# IDE & EDITOR FILES
+# ==========================================
+# VS Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# JetBrains (GoLand, IntelliJ)
+.idea/
+
+# Vim / Emacs
+*.swp
+*.swo
+*~
+\#*\#
