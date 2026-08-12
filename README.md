@@ -120,7 +120,6 @@ docker-compose up --build
     ├── js/
     │   ├── frame.js      # Crockfordian SPA runtime (History API + SSE)
     │   ├── dom.js        # Lightweight DOM manipulation library
-    │   ├── emitter.js    # Event emitter utility
     │   └── controllers/
     │       ├── main.js   # Homepage controller
     │       └── service.js# Imageboard thread/reply controller
