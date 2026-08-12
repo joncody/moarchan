@@ -13,10 +13,9 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-    "time"
+	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/joncody/roomer"
 )
 
 var (
@@ -25,23 +24,23 @@ var (
 )
 
 type RouteConfig struct {
-	Table       string `json:"table"`
-	Key         string `json:"key"`
-	Template    string `json:"template"`
-	Controllers string `json:"controllers"`
-	Privilege   string `json:"privilege,omitempty"`
+	Table       string
+	Key         string
+	Template    string
+	Controllers string
+	Privilege   string
 }
 
 type Route struct {
-	Route      string      `json:"route"`
-	Admin      RouteConfig `json:"admin"`
-	Authorized RouteConfig `json:"authorized"`
+	Route      string
+	Admin      RouteConfig
+	Authorized RouteConfig
 	RouteConfig
 }
 
 type AddedRoute struct {
 	Pattern *regexp.Regexp
-	Handler func(app *App, c *roomer.Conn, msg *roomer.Message, matches []string)
+	Handler func(app *App, w http.ResponseWriter, r *http.Request, matches []string)
 }
 
 type CompiledRoute struct {
@@ -54,9 +53,51 @@ type RoutePayload struct {
 	Controllers []string `json:"controllers"`
 }
 
+type DataProvider func(ctx context.Context, app *App, cfg RouteConfig, subs []string) (interface{}, error)
+
+// Fluent Route Builder Pattern
+type RouteBuilder struct {
+	route *Route
+}
+
+func (app *App) Route(pattern string) *RouteBuilder {
+	r := Route{
+		Route: pattern,
+	}
+	app.Routes = append(app.Routes, r)
+	return &RouteBuilder{
+		route: &app.Routes[len(app.Routes)-1],
+	}
+}
+
+func (b *RouteBuilder) Template(tmpl string) *RouteBuilder {
+	b.route.RouteConfig.Template = tmpl
+	return b
+}
+
+func (b *RouteBuilder) Controller(ctrls ...string) *RouteBuilder {
+	b.route.RouteConfig.Controllers = strings.Join(ctrls, ",")
+	return b
+}
+
+func (b *RouteBuilder) Table(table string) *RouteBuilder {
+	b.route.RouteConfig.Table = table
+	return b
+}
+
+func (b *RouteBuilder) Key(key string) *RouteBuilder {
+	b.route.RouteConfig.Key = key
+	return b
+}
+
+func (b *RouteBuilder) Privilege(priv string) *RouteBuilder {
+	b.route.RouteConfig.Privilege = priv
+	return b
+}
+
 var (
 	keyCleanRegex = regexp.MustCompile(`[^a-z0-9_\-\s]+`)
-	reservedPath  = regexp.MustCompile(`^/(ws|login|register|logout|static/|favicon\.ico)`)
+	reservedPath  = regexp.MustCompile(`^/(api/|login|register|logout|static/|favicon\.ico)`)
 )
 
 func ToKey(s string) string {
@@ -122,23 +163,25 @@ func (app *App) CompileRoutes() error {
 
 func (app *App) SetupRoutes() (*mux.Router, error) {
 	router := mux.NewRouter().StrictSlash(false)
+
+	router.Use(RecoveryMiddleware)
+	router.Use(LoggingMiddleware)
+	router.Use(SecurityHeadersMiddleware)
+
 	router.HandleFunc("/login", app.Login).Methods("POST")
 	router.HandleFunc("/register", app.Register).Methods("POST")
 	router.HandleFunc("/logout", app.Logout).Methods("POST")
-	router.HandleFunc("/ws", roomer.SocketHandlerWithOptions(
-		roomer.WithAuthorize(app.GetSessionValues),
-		roomer.WithMaxMessageSize(32*1024*1024), // 32MB max message limit
-		roomer.WithBufferSizes(16384, 16384),
-	)).Methods("GET")
+
+	router.HandleFunc("/api/render", app.RenderHandler).Methods("GET")
+	router.HandleFunc("/api/stream", app.SSEHandler).Methods("GET")
+
 	router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("./static/"))))
 	router.PathPrefix("/").HandlerFunc(app.baseHandler).Methods("GET")
-	if err := app.CompileRoutes(); err != nil {
-		return nil, fmt.Errorf("compile routes: %w", err)
-	}
+
 	return router, nil
 }
 
-func (app *App) AddRoute(pattern string, handler func(app *App, c *roomer.Conn, msg *roomer.Message, matches []string)) error {
+func (app *App) AddRoute(pattern string, handler func(app *App, w http.ResponseWriter, r *http.Request, matches []string)) error {
 	re, err := regexp.Compile(pattern)
 	if err != nil {
 		return fmt.Errorf("invalid route pattern %q: %w", pattern, err)
@@ -165,32 +208,6 @@ func (app *App) baseHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (app *App) Render(c *roomer.Conn, msg *roomer.Message, tmpl string, controllers []string, data interface{}) {
-	var buf bytes.Buffer
-	if err := app.Templates.ExecuteTemplate(&buf, tmpl, data); err != nil {
-		log.Printf("Render error (%s): %v", tmpl, err)
-		app.sendErrorResponse(c, msg, http.StatusInternalServerError, "Internal template render error")
-		return
-	}
-	cleanCtrls := make([]string, 0, len(controllers))
-	for _, ctrl := range controllers {
-		if trimmed := strings.TrimSpace(ctrl); trimmed != "" {
-			cleanCtrls = append(cleanCtrls, trimmed)
-		}
-	}
-	resp := RoutePayload{
-		Template:    buf.String(),
-		Controllers: cleanCtrls,
-	}
-	payload, err := json.Marshal(resp)
-	if err != nil {
-		log.Printf("JSON marshal error: %v", err)
-		app.sendErrorResponse(c, msg, http.StatusInternalServerError, "Internal response serialization error")
-		return
-	}
-	c.SendToClient(c.ID, "response", payload)
-}
-
 func resolveDynamic(field string, subs []string) string {
 	if !strings.HasPrefix(field, "$") {
 		return field
@@ -201,10 +218,10 @@ func resolveDynamic(field string, subs []string) string {
 	return ""
 }
 
-func (app *App) matchAddedRoute(c *roomer.Conn, msg *roomer.Message, path string) bool {
+func (app *App) matchAddedRoute(w http.ResponseWriter, r *http.Request, path string) bool {
 	for _, added := range app.Added {
 		if subs := added.Pattern.FindStringSubmatch(path); subs != nil {
-			added.Handler(app, c, msg, subs)
+			added.Handler(app, w, r, subs)
 			return true
 		}
 	}
@@ -221,7 +238,6 @@ func (app *App) MatchCompiledRoute(path string) (*CompiledRoute, []string) {
 }
 
 func SelectRouteConfig(route Route, privilege string) (RouteConfig, error) {
-	// Admin override
 	if route.Admin.Template != "" || route.Admin.Controllers != "" {
 		if privilege == "admin" {
 			return route.Admin, nil
@@ -232,7 +248,6 @@ func SelectRouteConfig(route Route, privilege string) (RouteConfig, error) {
 		return RouteConfig{}, ErrForbidden
 	}
 
-	// Authorized users
 	if route.Authorized.Privilege != "" {
 		if privilege == "" {
 			return RouteConfig{}, ErrUnauthorized
@@ -245,18 +260,21 @@ func SelectRouteConfig(route Route, privilege string) (RouteConfig, error) {
 		return RouteConfig{}, ErrForbidden
 	}
 
-	// Default public config
 	return route.RouteConfig, nil
 }
 
 func (app *App) ResolveRouteData(ctx context.Context, cfg RouteConfig, subs []string) (interface{}, error) {
+	if app.DataProvider != nil {
+		return app.DataProvider(ctx, app, cfg, subs)
+	}
+
 	table := resolveDynamic(cfg.Table, subs)
 	key := resolveDynamic(cfg.Key, subs)
 	if table == "" {
 		return nil, nil
 	}
 	if IsSystemTable(table) {
-		return nil, fmt.Errorf("access to system table %q via dynamic route is restricted", table)
+		return nil, fmt.Errorf("access to system table %q is restricted", table)
 	}
 	if !IsValidTableName(table) {
 		return nil, fmt.Errorf("invalid table name: %q", table)
@@ -267,54 +285,85 @@ func (app *App) ResolveRouteData(ctx context.Context, cfg RouteConfig, subs []st
 	return app.GetRows(ctx, table)
 }
 
-func (app *App) sendErrorResponse(c *roomer.Conn, msg *roomer.Message, status int, text string) {
-	resp := map[string]interface{}{
-		"error":  text,
-		"status": status,
-	}
-	payload, _ := json.Marshal(resp)
-	c.SendToClient(c.ID, "error", payload)
-}
-
-func (app *App) ProcessRequest(c *roomer.Conn, msg *roomer.Message) error {
-	path := strings.TrimSpace(string(msg.Payload))
-
-	// 1. Added routes (custom handlers)
-	if app.matchAddedRoute(c, msg, path) {
-		return nil
+func (app *App) RenderHandler(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimSpace(r.URL.Query().Get("path"))
+	if path == "" {
+		path = "/"
 	}
 
-	// 2. Match configured routes
+	if app.matchAddedRoute(w, r, path) {
+		return
+	}
+
 	cr, subs := app.MatchCompiledRoute(path)
 	if cr == nil {
-		app.sendErrorResponse(c, msg, http.StatusNotFound, fmt.Sprintf("No route matched: %s", path))
-		return fmt.Errorf("no route matched: %s", path)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  fmt.Sprintf("No route matched: %s", path),
+			"status": 404,
+		})
+		return
 	}
 
-	// 3. Select route config by privilege
-	privilege := c.Claims["privilege"]
+	sessionValues, _ := app.GetSessionValues(r)
+	privilege := sessionValues["privilege"]
+
 	cfg, err := SelectRouteConfig(cr.Config, privilege)
 	if err != nil {
+		status := http.StatusForbidden
 		if errors.Is(err, ErrUnauthorized) {
-			app.sendErrorResponse(c, msg, http.StatusUnauthorized, "Authentication required")
-		} else {
-			app.sendErrorResponse(c, msg, http.StatusForbidden, "Access denied")
+			status = http.StatusUnauthorized
 		}
-		return fmt.Errorf("route permission error (%s): %w", path, err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  err.Error(),
+			"status": status,
+		})
+		return
 	}
 
-	// 4. Load data (if any)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
+
 	data, err := app.ResolveRouteData(ctx, cfg, subs)
 	if err != nil {
 		log.Printf("Route data error (%s): %v", path, err)
-		app.sendErrorResponse(c, msg, http.StatusNotFound, fmt.Sprintf("Data not found for route: %s", path))
-		return fmt.Errorf("data error (%s): %w", path, err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  fmt.Sprintf("Data not found for route: %s", path),
+			"status": 404,
+		})
+		return
 	}
 
-	// 5. Render response
+	var buf bytes.Buffer
+	if err := app.Templates.ExecuteTemplate(&buf, cfg.Template, data); err != nil {
+		log.Printf("Render error (%s): %v", cfg.Template, err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  "Internal template render error",
+			"status": 500,
+		})
+		return
+	}
+
 	controllers := strings.Split(cfg.Controllers, ",")
-	app.Render(c, msg, cfg.Template, controllers, data)
-	return nil
+	cleanCtrls := make([]string, 0, len(controllers))
+	for _, ctrl := range controllers {
+		if trimmed := strings.TrimSpace(ctrl); trimmed != "" {
+			cleanCtrls = append(cleanCtrls, trimmed)
+		}
+	}
+
+	resp := RoutePayload{
+		Template:    buf.String(),
+		Controllers: cleanCtrls,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
 }

@@ -1,12 +1,10 @@
 "use strict";
 
-import roomer from "./roomer.js";
-
 function get_global_environment() {
-    if (globalThis !== undefined) {
+    if (typeof globalThis !== "undefined") {
         return globalThis;
     }
-    if (window !== undefined) {
+    if (typeof window !== "undefined") {
         return window;
     }
     return undefined;
@@ -14,31 +12,32 @@ function get_global_environment() {
 
 const global_env = get_global_environment();
 
-const decoder = new TextDecoder("utf-8");
 const app = {
     activeCleanups: [],
     base: document.querySelector("[data-base]"),
     controllers: {},
-    hash: "/",
-    hashmatch: /^#*(.*)$/,
-    hrefs: document.querySelectorAll("[data-href]"),
-    retries: 0,
-    socket: null
+    path: "/",
+    hrefs: document.querySelectorAll("[data-href]")
 };
 
-function changehash(event) {
-    if (event && event.currentTarget && event.currentTarget.dataset) {
-        global_env.location.hash = event.currentTarget.dataset.href;
+function navigate(e) {
+    if (e && e.currentTarget && e.currentTarget.dataset && e.currentTarget.dataset.href) {
+        e.preventDefault();
+        const href = e.currentTarget.dataset.href;
+        if (global_env.location.pathname !== href) {
+            global_env.history.pushState(null, "", href);
+            loadRoute(href);
+        }
     }
 }
 
 function assignHrefs() {
     app.hrefs.forEach(function (el) {
-        el.removeEventListener("click", changehash);
+        el.removeEventListener("click", navigate);
     });
     app.hrefs = document.querySelectorAll("[data-href]");
     app.hrefs.forEach(function (el) {
-        el.addEventListener("click", changehash);
+        el.addEventListener("click", navigate);
     });
 }
 
@@ -55,59 +54,24 @@ function runCleanups() {
     app.activeCleanups = [];
 }
 
-global_env.addEventListener("hashchange", function () {
-    const match = app.hashmatch.exec(global_env.location.hash);
-    const hash = (match && match[1]) ? match[1] : "/";
+function loadRoute(path) {
+    app.path = path || global_env.location.pathname;
 
-    if (hash !== app.hash) {
-        app.hash = hash;
-        if (app.socket && typeof app.socket.send === "function") {
-            app.socket.send("request", app.hash);
+    fetch("/api/render?path=" + encodeURIComponent(app.path), {
+        headers: {
+            "X-Requested-With": "XMLHttpRequest"
         }
-    }
-});
-
-(function init() {
-    const protocol = (
-        global_env.location.protocol === "https:"
-        ? "wss:"
-        : "ws:"
-    );
-    app.socket = roomer(
-        protocol + "//" + global_env.location.host + "/ws"
-    );
-
-    app.socket.on("open", function () {
-        app.retries = 0;
-        const match = app.hashmatch.exec(global_env.location.hash);
-        app.hash = (match && match[1]) ? match[1] : "";
-        if (!app.hash) {
-            global_env.location.hash = "/";
-            app.hash = "/";
+    }).then(function (response) {
+        if (!response.ok) {
+            return response.json().then(function (errData) {
+                throw new Error(errData.error || ("Error " + response.status));
+            }).catch(function () {
+                throw new Error("Error " + response.status);
+            });
         }
-        app.socket.send("request", app.hash);
-    });
-
-    app.socket.on("close", function () {
-        if (app.retries < 10) {
-            global_env.setTimeout(init, 3000);
-        }
-        app.retries += 1;
-    });
-
-    app.socket.on("response", function (payload) {
-        let msg;
-        try {
-            msg = JSON.parse(decoder.decode(payload));
-        } catch (err) {
-            return;
-        }
-
+        return response.json();
+    }).then(function (msg) {
         runCleanups();
-
-        if (typeof app.socket.purge === "function") {
-            app.socket.purge();
-        }
 
         app.base.innerHTML = msg.template;
         assignHrefs();
@@ -130,32 +94,49 @@ global_env.addEventListener("hashchange", function () {
                 }
             });
         }
-    });
-
-    app.socket.on("error", function (payload) {
-        let errData;
-        try {
-            errData = JSON.parse(decoder.decode(payload));
-        } catch (err) {
-            errData = { error: "An unexpected error occurred." };
-        }
-
+    }).catch(function (err) {
         runCleanups();
-
-        if (typeof app.socket.purge === "function") {
-            app.socket.purge();
-        }
-
         app.base.innerHTML = (
             "<div class=\"page\"><div class=\"pink-section\">" +
-            "<h3 class=\"box-header pink-header\">Error " +
-            (errData.status || 500) +
-            "</h3><p class=\"box-message\">" +
-            (errData.error || "An unexpected error occurred.") +
+            "<h3 class=\"box-header pink-header\">Error</h3><p class=\"box-message\">" +
+            (err.message || "An unexpected error occurred.") +
             "</p></div></div>"
         );
         assignHrefs();
     });
+}
+
+global_env.addEventListener("popstate", function () {
+    loadRoute(global_env.location.pathname);
+});
+
+function createEventSource(url) {
+    return new EventSource(url);
+}
+
+app.subscribeToStream = function (topic, handlers) {
+    const sse = createEventSource("/api/stream?topic=" + encodeURIComponent(topic));
+
+    if (handlers && typeof handlers === "object") {
+        Object.keys(handlers).forEach(function (eventType) {
+            sse.addEventListener(eventType, function (e) {
+                try {
+                    const data = JSON.parse(e.data);
+                    handlers[eventType](data);
+                } catch (err) {
+                    console.error("SSE JSON parse error: ", err);
+                }
+            });
+        });
+    }
+
+    return function cleanup() {
+        sse.close();
+    };
+};
+
+(function init() {
+    loadRoute(global_env.location.pathname);
 }());
 
 export default app;

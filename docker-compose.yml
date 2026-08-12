@@ -6,10 +6,9 @@ services:
     container_name: moarchan-db
     restart: always
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-    # Do NOT expose "5432:5432" to host network in production
+      POSTGRES_USER: ${POSTGRES_USER:-moarchan}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-moarchan}
+      POSTGRES_DB: ${POSTGRES_DB:-moarchan}
     expose:
       - "5432"
     volumes:
@@ -22,13 +21,14 @@ services:
     ports:
       - "9001:9001"
     environment:
+      PORT: "9001"
       POSTGRES_HOST: db
-      POSTGRES_PORT: 5432
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-      SESSION_HASH_KEY: ${SESSION_HASH_KEY}
-      SESSION_BLOCK_KEY: ${SESSION_BLOCK_KEY}
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER:-moarchan}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-moarchan}
+      POSTGRES_DB: ${POSTGRES_DB:-moarchan}
+      SESSION_HASH_KEY: ${SESSION_HASH_KEY:-12345678901234567890123456789012}
+      SESSION_BLOCK_KEY: ${SESSION_BLOCK_KEY:-abcdefghijklmnopqrstuvwx12345678}
     depends_on:
       - db
 

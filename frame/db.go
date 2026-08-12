@@ -18,12 +18,10 @@ var systemTables = map[string]bool{
 	"auth": true,
 }
 
-// IsValidTableName validates table identifier formatting.
 func IsValidTableName(name string) bool {
 	return validTableNameRegex.MatchString(name)
 }
 
-// IsSystemTable returns true if the table is restricted system metadata.
 func IsSystemTable(table string) bool {
 	lower := strings.ToLower(table)
 	if systemTables[lower] {
@@ -32,9 +30,7 @@ func IsSystemTable(table string) bool {
 	return strings.HasPrefix(lower, "pg_") || strings.HasPrefix(lower, "information_schema")
 }
 
-// EnsureTable initializes a table if not already created, caching known tables in memory.
 func (app *App) EnsureTable(ctx context.Context, table string) error {
-	// Check memory cache first to avoid runtime DDL lock overhead.
 	if _, loaded := app.knownTables.Load(table); loaded {
 		return nil
 	}
@@ -59,22 +55,29 @@ func (app *App) EnsureTable(ctx context.Context, table string) error {
 }
 
 func (app *App) PrepareTables(ctx context.Context) error {
-	tables := []string{"auth"}
+	const initSchema = `
+		CREATE TABLE IF NOT EXISTS auth (
+			id BIGSERIAL PRIMARY KEY,
+			key TEXT UNIQUE NOT NULL,
+			value JSONB
+		);
+	`
+	if _, err := app.Driver.ExecContext(ctx, initSchema); err != nil {
+		return fmt.Errorf("prepare frame base database schema: %w", err)
+	}
+	app.knownTables.Store("auth", true)
+
 	for _, r := range app.Routes {
 		if r.Table == "" || strings.HasPrefix(r.Table, "$") {
 			continue
 		}
-		tables = append(tables, r.Table)
-	}
-	for _, table := range tables {
-		if err := app.EnsureTable(ctx, table); err != nil {
+		if err := app.EnsureTable(ctx, r.Table); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// ExecTx executes a function inside a database transaction with automatic rollback.
 func (app *App) ExecTx(ctx context.Context, fn func(*sql.Tx) error) error {
 	tx, err := app.Driver.BeginTx(ctx, nil)
 	if err != nil {
@@ -142,7 +145,6 @@ func (app *App) GetRowsPaginated(ctx context.Context, table string, limit, offse
 		offset = 0
 	}
 
-	// Deterministic ordering by primary key ID (newest first)
 	query := fmt.Sprintf(`SELECT value FROM "%s" ORDER BY id DESC LIMIT $1 OFFSET $2`, table)
 	rows, err := app.Driver.QueryContext(ctx, query, limit, offset)
 	if err != nil {
@@ -193,6 +195,17 @@ func (app *App) InsertRow(ctx context.Context, table, key string, value interfac
 
 	if _, err := app.Driver.ExecContext(ctx, query, key, data); err != nil {
 		return fmt.Errorf("upsert into %q (key=%q): %w", table, key, err)
+	}
+	return nil
+}
+
+func (app *App) DeleteRow(ctx context.Context, table, key string) error {
+	if err := app.EnsureTable(ctx, table); err != nil {
+		return err
+	}
+	query := fmt.Sprintf(`DELETE FROM "%s" WHERE key = $1`, table)
+	if _, err := app.Driver.ExecContext(ctx, query, key); err != nil {
+		return fmt.Errorf("delete from %q (key=%q): %w", table, key, err)
 	}
 	return nil
 }

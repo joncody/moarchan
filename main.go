@@ -1,19 +1,19 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"html"
 	"image"
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
+	"io"
 	"log"
+	"mime/multipart"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -21,8 +21,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/joncody/roomer"
-	"github.com/vincent-petithory/dataurl"
 	"moarchan/frame"
 )
 
@@ -30,45 +28,44 @@ var app *frame.App
 var tagRegex = regexp.MustCompile(`&gt;&gt;([A-Za-z0-9]+)`)
 
 type Thread struct {
-	Type     string           `json:"type"`
-	Topic    string           `json:"topic"`
-	Name     string           `json:"name"`
-	Subject  string           `json:"subject"`
-	Options  string           `json:"options"`
-	Comment  string           `json:"comment"`
-	Replies  map[string]Reply `json:"replies"`
-	TaggedBy []interface{}    `json:"taggedBy"`
-	Tagging  []interface{}    `json:"tagging"`
-	FileInfo
-	Unique
+	Hash           string           `json:"hash"`
+	Topic          string           `json:"topic"`
+	Name           string           `json:"name"`
+	Subject        string           `json:"subject"`
+	Options        string           `json:"options"`
+	Comment        string           `json:"comment"`
+	FileName       string           `json:"file_name"`
+	FileMime       string           `json:"file_mime"`
+	FileSize       string           `json:"file_size"`
+	FileDimensions string           `json:"file_dimensions"`
+	Timestamp      string           `json:"timestamp"`
+	Replies        map[string]Reply `json:"replies"`
+	TaggedBy       []string         `json:"taggedBy"`
+	Tagging        []string         `json:"tagging"`
 }
 
 type Reply struct {
-	Type     string   `json:"type"`
-	Thread   string   `json:"thread"`
-	Topic    string   `json:"topic"`
-	Name     string   `json:"name"`
-	Options  string   `json:"options"`
-	Comment  string   `json:"comment"`
-	TaggedBy []string `json:"taggedBy"`
-	Tagging  []string `json:"tagging"`
-	FileInfo
-	Unique
+	Hash           string   `json:"hash"`
+	Thread         string   `json:"thread"`
+	Topic          string   `json:"topic"`
+	Name           string   `json:"name"`
+	Options        string   `json:"options"`
+	Comment        string   `json:"comment"`
+	FileName       string   `json:"file_name"`
+	FileMime       string   `json:"file_mime"`
+	FileSize       string   `json:"file_size"`
+	FileDimensions string   `json:"file_dimensions"`
+	Timestamp      string   `json:"timestamp"`
+	TaggedBy       []string `json:"taggedBy"`
+	Tagging        []string `json:"tagging"`
 }
 
-type Unique struct {
-	Timestamp string `json:"timestamp"`
-	Uuid      string `json:"uuid"`
-	Hash      string `json:"hash"`
-}
-
-type FileInfo struct {
-	File       string `json:"file"`
-	Name       string `json:"file_name"`
-	Path       string `json:"file_path"`
-	Mime       string `json:"file_mime"`
-	Size       string `json:"file_size"`
-	Dimensions string `json:"file_dimensions"`
+type FileDetails struct {
+	Name       string
+	Path       string
+	Mime       string
+	Size       string
+	Dimensions string
 }
 
 func sanitizeComment(raw string) (string, []string) {
@@ -86,7 +83,6 @@ func sanitizeComment(raw string) (string, []string) {
 			return fmt.Sprintf(`<span class="post-tag blue-text-link" data-tag="%s">%s</span>`, postHash, match)
 		})
 
-		// Format greentext lines (>quote)
 		if strings.HasPrefix(formattedLine, "&gt;") && !strings.HasPrefix(formattedLine, "&gt;&gt;") {
 			formattedLine = fmt.Sprintf(`<span class="post-quote">%s</span>`, formattedLine)
 		}
@@ -97,20 +93,18 @@ func sanitizeComment(raw string) (string, []string) {
 	return strings.Join(formattedLines, "<br />"), tags
 }
 
-func (f *FileInfo) Process(uniqueID string) error {
-	if f.File == "" {
-		return nil
+func processMultipartUpload(fileHeader *multipart.FileHeader, uniqueID string) (*FileDetails, error) {
+	if fileHeader == nil {
+		return &FileDetails{}, nil
 	}
 
-	// 1. Decode Data URL
-	fdata, err := dataurl.DecodeString(f.File)
+	file, err := fileHeader.Open()
 	if err != nil {
-		log.Println("DataURL decode error:", err)
-		return fmt.Errorf("invalid base64 image data: %w", err)
+		return nil, fmt.Errorf("open uploaded file: %w", err)
 	}
+	defer file.Close()
 
-	// 2. Validate file extension whitelist to prevent Stored XSS
-	ext := strings.ToLower(filepath.Ext(f.Name))
+	ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
 	allowedExts := map[string]bool{
 		".jpg":  true,
 		".jpeg": true,
@@ -118,51 +112,52 @@ func (f *FileInfo) Process(uniqueID string) error {
 		".gif":  true,
 	}
 	if !allowedExts[ext] {
-		return fmt.Errorf("file extension %q is not allowed", ext)
+		return nil, fmt.Errorf("file extension %q is not allowed", ext)
 	}
 
-	// 3. Decode binary header to verify image integrity and format
-	config, format, err := image.DecodeConfig(bytes.NewReader(fdata.Data))
+	config, format, err := image.DecodeConfig(file)
 	if err != nil {
-		log.Println("Image DecodeConfig error:", err)
-		return fmt.Errorf("invalid or corrupted image binary: %w", err)
+		return nil, fmt.Errorf("invalid or corrupted image binary: %w", err)
 	}
 
-	f.Dimensions = fmt.Sprintf("%dx%d", config.Width, config.Height)
-	f.Mime = "image/" + format
+	if _, err := file.Seek(0, 0); err != nil {
+		return nil, fmt.Errorf("reset file pointer: %w", err)
+	}
 
-	// 4. Sanitize filename and prevent collisions
-	baseName := filepath.Base(f.Name)
+	baseName := filepath.Base(fileHeader.Filename)
 	if baseName == "" || baseName == "." {
 		baseName = "upload" + ext
 	}
 	safeName := fmt.Sprintf("%s_%s", uniqueID, baseName)
-	f.Name = safeName
-	f.Path = fmt.Sprintf("./static/images/uploads/%s", safeName)
+	savePath := fmt.Sprintf("./static/images/uploads/%s", safeName)
 
-	// 5. Ensure upload directory exists
 	if err := os.MkdirAll("./static/images/uploads", 0755); err != nil {
-		log.Println("MkdirAll error:", err)
-		return err
+		return nil, fmt.Errorf("create uploads directory: %w", err)
 	}
 
-	// 6. Write image file to disk with strict permissions
-	if err := os.WriteFile(f.Path, fdata.Data, 0600); err != nil {
-		log.Println("WriteFile error:", err)
-		return err
+	out, err := os.OpenFile(savePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		return nil, fmt.Errorf("create destination file: %w", err)
+	}
+	defer out.Close()
+
+	written, err := io.Copy(out, file)
+	if err != nil {
+		return nil, fmt.Errorf("write uploaded file to disk: %w", err)
 	}
 
-	// 7. Calculate file size in KB
-	f.Size = fmt.Sprintf("%.1f", float64(len(fdata.Data))/1024.0)
-
-	// 8. Clear raw payload from memory
-	f.File = ""
-	return nil
+	return &FileDetails{
+		Name:       safeName,
+		Path:       savePath,
+		Mime:       "image/" + format,
+		Size:       fmt.Sprintf("%.1f", float64(written)/1024.0),
+		Dimensions: fmt.Sprintf("%dx%d", config.Width, config.Height),
+	}, nil
 }
 
-func (u *Unique) Generate() {
+func generateUnique() (string, string) {
 	now := time.Now()
-	u.Timestamp = fmt.Sprintf(
+	timestamp := fmt.Sprintf(
 		"%d/%d/%d(%s)%02d:%02d:%02d",
 		now.Month(),
 		now.Day(),
@@ -174,176 +169,257 @@ func (u *Unique) Generate() {
 	)
 	id, err := uuid.NewRandom()
 	if err != nil {
-		log.Println(err)
+		return timestamp, fmt.Sprintf("%x", sha256.Sum256([]byte(timestamp)))[:9]
+	}
+	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(timestamp+id.String())))[:9]
+	return timestamp, hash
+}
+
+func handleCreateThread(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		http.Error(w, "Multipart form parse error or size limit exceeded", http.StatusBadRequest)
 		return
 	}
-	u.Uuid = id.String()
-	u.Hash = fmt.Sprintf("%x", sha256.Sum256([]byte(u.Timestamp+u.Uuid)))[:9]
-}
 
-func SendMessage(conn *roomer.Conn, msg *roomer.Message) {
-	conn.SendToRoom(msg.Room, msg.Event, msg.Payload)
-	conn.TrySend(msg.Bytes())
-}
+	topic := strings.TrimSpace(r.FormValue("topic"))
+	rawName := strings.TrimSpace(r.FormValue("name"))
+	rawSub := strings.TrimSpace(r.FormValue("subject"))
+	rawOpt := strings.TrimSpace(r.FormValue("options"))
+	rawCom := strings.TrimSpace(r.FormValue("comment"))
 
-func threadHandler(conn *roomer.Conn, msg *roomer.Message) error {
-	var thread Thread
-	err := json.Unmarshal(msg.Payload, &thread)
+	if topic == "" {
+		http.Error(w, "Missing topic", http.StatusBadRequest)
+		return
+	}
+
+	_, fileHeader, err := r.FormFile("file")
 	if err != nil {
-		log.Println("Unmarshal error:", err)
-		return err
-	}
-	if thread.Topic == "" {
-		return fmt.Errorf("invalid thread payload: missing topic")
-	}
-	if thread.FileInfo.File == "" {
-		return fmt.Errorf("image file required to post a new thread")
+		http.Error(w, "Image file required to post a new thread", http.StatusBadRequest)
+		return
 	}
 
-	// Validate topic table name safety
-	if !frame.IsValidTableName(thread.Topic) || frame.IsSystemTable(thread.Topic) {
-		return fmt.Errorf("invalid or restricted topic table: %q", thread.Topic)
+	timestamp, hash := generateUnique()
+	fileDetails, err := processMultipartUpload(fileHeader, hash)
+	if err != nil {
+		log.Println("File upload error:", err)
+		http.Error(w, fmt.Sprintf("File upload failed: %v", err), http.StatusBadRequest)
+		return
 	}
 
-	thread.Unique.Generate()
-	thread.Name = html.EscapeString(thread.Name)
-	thread.Subject = html.EscapeString(thread.Subject)
-	thread.Comment, _ = sanitizeComment(thread.Comment)
-
-	if err := thread.FileInfo.Process(thread.Unique.Hash); err != nil {
-		log.Println("File processing error:", err)
-		return fmt.Errorf("file upload failed: %w", err)
+	comment, _ := sanitizeComment(rawCom)
+	name := html.EscapeString(rawName)
+	if name == "" {
+		name = "Anonymous"
 	}
+	subject := html.EscapeString(rawSub)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	if err := app.InsertRow(ctx, thread.Topic, thread.Unique.Hash, &thread); err != nil {
-		log.Println(err)
-		return err
+	const insertQuery = `
+		INSERT INTO threads (hash, topic, name, subject, options, comment, file_name, file_mime, file_size, file_dimensions, timestamp)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+	`
+	_, err = app.Driver.ExecContext(ctx, insertQuery,
+		hash, topic, name, subject, rawOpt, comment,
+		fileDetails.Name, fileDetails.Mime, fileDetails.Size, fileDetails.Dimensions, timestamp,
+	)
+	if err != nil {
+		log.Println("Insert thread error:", err)
+		http.Error(w, "Database error creating thread", http.StatusInternalServerError)
+		return
 	}
+
+	thread := Thread{
+		Hash:           hash,
+		Topic:          topic,
+		Name:           name,
+		Subject:        subject,
+		Options:        rawOpt,
+		Comment:        comment,
+		FileName:       fileDetails.Name,
+		FileMime:       fileDetails.Mime,
+		FileSize:       fileDetails.Size,
+		FileDimensions: fileDetails.Dimensions,
+		Timestamp:      timestamp,
+		Replies:        make(map[string]Reply),
+		TaggedBy:       []string{},
+		Tagging:        []string{},
+	}
+
 	payload, err := json.Marshal(&thread)
 	if err != nil {
-		log.Println(err)
-		return err
+		http.Error(w, "Serialization error", http.StatusInternalServerError)
+		return
 	}
-	response := roomer.NewMessage(thread.Topic, "new-thread", "", conn.ID, payload)
-	SendMessage(conn, response)
-	return nil
+
+	app.Hub.Broadcast(topic, "new-thread", payload)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	w.Write(payload)
 }
 
-func replyHandler(conn *roomer.Conn, msg *roomer.Message) error {
-	var reply Reply
-	err := json.Unmarshal(msg.Payload, &reply)
+func handleCreateReply(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(8 << 20); err != nil {
+		http.Error(w, "Multipart form parse error or size limit exceeded", http.StatusBadRequest)
+		return
+	}
+
+	topic := strings.TrimSpace(r.FormValue("topic"))
+	threadHash := strings.TrimSpace(r.FormValue("thread"))
+	rawName := strings.TrimSpace(r.FormValue("name"))
+	rawOpt := strings.TrimSpace(r.FormValue("options"))
+	rawCom := strings.TrimSpace(r.FormValue("comment"))
+
+	if topic == "" || threadHash == "" {
+		http.Error(w, "Missing thread or topic parameter", http.StatusBadRequest)
+		return
+	}
+	if rawCom == "" {
+		http.Error(w, "Comment is required to post a reply", http.StatusBadRequest)
+		return
+	}
+
+	var fileHeader *multipart.FileHeader
+	file, header, err := r.FormFile("file")
+	if err == nil {
+		file.Close()
+		fileHeader = header
+	}
+
+	timestamp, hash := generateUnique()
+	fileDetails, err := processMultipartUpload(fileHeader, hash)
 	if err != nil {
-		log.Println("Unmarshal error:", err)
-		return err
-	}
-	if reply.Thread == "" || reply.Topic == "" {
-		return fmt.Errorf("invalid reply payload: missing thread or topic")
+		log.Println("File upload error:", err)
+		http.Error(w, fmt.Sprintf("File upload failed: %v", err), http.StatusBadRequest)
+		return
 	}
 
-	// Validate topic table name safety before raw SQL transaction
-	if !frame.IsValidTableName(reply.Topic) || frame.IsSystemTable(reply.Topic) {
-		return fmt.Errorf("invalid or restricted topic table: %q", reply.Topic)
+	comment, tags := sanitizeComment(rawCom)
+	name := html.EscapeString(rawName)
+	if name == "" {
+		name = "Anonymous"
 	}
 
-	reply.Unique.Generate()
-	reply.Name = html.EscapeString(reply.Name)
-
-	var tags []string
-	reply.Comment, tags = sanitizeComment(reply.Comment)
-	reply.Tagging = tags
-
-	if err := reply.FileInfo.Process(reply.Unique.Hash); err != nil {
-		log.Println("File processing error:", err)
-		return fmt.Errorf("file upload failed: %w", err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	// Ensure target table exists safely via memory-cached frame helper
-	if err := app.EnsureTable(ctx, reply.Topic); err != nil {
-		return fmt.Errorf("ensure topic table %q: %w", reply.Topic, err)
-	}
-
-	// Use Transaction + Row Lock (FOR UPDATE) to prevent race condition on concurrent replies
 	tx, err := app.Driver.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
+		http.Error(w, "Transaction error", http.StatusInternalServerError)
+		return
 	}
 	defer tx.Rollback()
 
-	var value []byte
-	query := fmt.Sprintf(`SELECT value FROM "%s" WHERE key = $1 FOR UPDATE`, reply.Topic)
-	if err := tx.QueryRowContext(ctx, query, reply.Thread).Scan(&value); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("thread %q not found in topic %q", reply.Thread, reply.Topic)
-		}
-		return err
+	var exists bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM threads WHERE hash = $1 FOR UPDATE)`, threadHash).Scan(&exists); err != nil || !exists {
+		http.Error(w, "Target thread not found", http.StatusNotFound)
+		return
 	}
 
-	var thread Thread
-	if err := json.Unmarshal(value, &thread); err != nil {
-		return fmt.Errorf("unmarshal thread: %w", err)
-	}
+	taggingJSON, _ := json.Marshal(tags)
+	taggedByJSON, _ := json.Marshal([]string{})
 
-	if thread.Replies == nil {
-		thread.Replies = make(map[string]Reply)
-	}
-	thread.Replies[reply.Unique.Hash] = reply
-
-	for _, tag := range reply.Tagging {
-		if tag == reply.Thread {
-			thread.TaggedBy = append(thread.TaggedBy, reply.Unique.Hash)
-		} else if taggedReply, exists := thread.Replies[tag]; exists {
-			taggedReply.TaggedBy = append(taggedReply.TaggedBy, reply.Unique.Hash)
-			thread.Replies[tag] = taggedReply
-		}
-	}
-
-	updatedData, err := json.Marshal(&thread)
+	const insertPostQuery = `
+		INSERT INTO posts (hash, thread_hash, topic, name, options, comment, file_name, file_mime, file_size, file_dimensions, timestamp, tagging, tagged_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+	`
+	_, err = tx.ExecContext(ctx, insertPostQuery,
+		hash, threadHash, topic, name, rawOpt, comment,
+		fileDetails.Name, fileDetails.Mime, fileDetails.Size, fileDetails.Dimensions, timestamp,
+		taggingJSON, taggedByJSON,
+	)
 	if err != nil {
-		return fmt.Errorf("marshal updated thread: %w", err)
-	}
-
-	upsertQuery := fmt.Sprintf(`
-		INSERT INTO "%s" (key, value)
-		VALUES ($1, $2)
-		ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
-		reply.Topic)
-
-	if _, err := tx.ExecContext(ctx, upsertQuery, reply.Thread, updatedData); err != nil {
-		return fmt.Errorf("upsert thread: %w", err)
+		log.Println("Insert post error:", err)
+		http.Error(w, "Database error creating reply", http.StatusInternalServerError)
+		return
 	}
 
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
+		http.Error(w, "Commit transaction error", http.StatusInternalServerError)
+		return
+	}
+
+	reply := Reply{
+		Hash:           hash,
+		Thread:         threadHash,
+		Topic:          topic,
+		Name:           name,
+		Options:        rawOpt,
+		Comment:        comment,
+		FileName:       fileDetails.Name,
+		FileMime:       fileDetails.Mime,
+		FileSize:       fileDetails.Size,
+		FileDimensions: fileDetails.Dimensions,
+		Timestamp:      timestamp,
+		TaggedBy:       []string{},
+		Tagging:        tags,
 	}
 
 	payload, err := json.Marshal(&reply)
 	if err != nil {
-		log.Println(err)
-		return err
+		http.Error(w, "Serialization error", http.StatusInternalServerError)
+		return
 	}
-	response := roomer.NewMessage(reply.Topic, "new-reply", "", conn.ID, payload)
-	SendMessage(conn, response)
-	return nil
+
+	app.Hub.Broadcast(topic, "new-reply", payload)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	w.Write(payload)
 }
 
 func main() {
 	var err error
-	app, err = frame.NewApp("./config.json")
+	app, err = frame.NewApp()
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err := roomer.RegisterHandler("new-thread", threadHandler); err != nil {
-		log.Fatal("Failed to register handler:", err)
+
+	// 1. Programmatic Route Declarations (Fluent Go API)
+	app.Route("/news").Template("news")
+	app.Route("/blog").Template("blog")
+	app.Route("/faq").Template("faq")
+	app.Route("/rules").Template("rules")
+	app.Route("/advertise").Template("advertise")
+	app.Route("/press").Template("press")
+	app.Route("/about").Template("about")
+	app.Route("/feedback").Template("feedback")
+	app.Route("/legal").Template("legal")
+	app.Route("/contact").Template("contact")
+
+	app.Route(`^/([A-Za-z0-9]+)/thread/([A-Za-z0-9]+)$`).
+		Table("$1").
+		Key("$2").
+		Template("thread").
+		Controller("service")
+
+	app.Route(`^/([A-Za-z0-9]+)[\/]?$`).
+		Table("$1").
+		Template("topic").
+		Controller("service")
+
+	app.Route(`^/$`).
+		Table("main").
+		Template("main").
+		Controller("main")
+
+	// 2. Application Data Resolver Hook
+	app.DataProvider = MoarchanDataProvider
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// 3. Database Schema Initialization
+	if err := InitMoarchanSchema(ctx, app); err != nil {
+		log.Fatalf("Failed to initialize moarchan schema: %v", err)
 	}
-	if err := roomer.RegisterHandler("new-reply", replyHandler); err != nil {
-		log.Fatal("Failed to register handler:", err)
-	}
+
+	// 4. REST Endpoints
+	app.Router.HandleFunc("/api/threads", handleCreateThread).Methods("POST")
+	app.Router.HandleFunc("/api/replies", handleCreateReply).Methods("POST")
+
 	if err := app.Start(); err != nil {
 		log.Fatal("Application start error:", err)
 	}

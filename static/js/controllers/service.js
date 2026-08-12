@@ -1,20 +1,30 @@
 import dom from "../dom.js";
 import frame from "../frame.js";
 
-const decoder = new TextDecoder("utf-8");
-
 function getNode(e, node) {
     if (node && typeof node.data === "function") {
         return node;
     }
+    if (node && (node.nodeType !== undefined || node.dataset !== undefined)) {
+        return dom(node);
+    }
+    if (e && typeof e.data === "function") {
+        return e;
+    }
+    if (e && (e.nodeType !== undefined || e.dataset !== undefined)) {
+        return dom(e);
+    }
     if (e && e.currentTarget) {
         return dom(e.currentTarget);
+    }
+    if (e && e.target) {
+        return dom(e.target);
     }
     return dom();
 }
 
-function getFirstData(node, key) {
-    const targetNode = getNode(null, node);
+function getFirstData(nodeOrEvent, key) {
+    const targetNode = getNode(nodeOrEvent, null);
     const dataVal = targetNode.data(key);
     if (Array.isArray(dataVal)) {
         return dataVal[0];
@@ -22,8 +32,11 @@ function getFirstData(node, key) {
     return dataVal;
 }
 
+function createFormData() {
+    return new FormData();
+}
+
 frame.controllers.service = function service(global, view) {
-    void view;
     const topicsMap = {
         "3": "3DCG",
         "a": "Anime & Manga",
@@ -94,21 +107,29 @@ frame.controllers.service = function service(global, view) {
     const replyBoxHeaderText = dom(".reply-box-header-text");
     const replyBoxPost = dom(".reply-box-post");
     const replyBox = dom(".reply-box");
-    const hashsplit = global.location.hash.split("/");
-    const isThreadView = (hashsplit[2] === "thread");
+    const pathParts = global.location.pathname.split("/").filter(Boolean);
+    const topic = pathParts[0] || "";
+    const isThreadView = (pathParts[1] === "thread");
     let mouseX;
     let mouseY;
-    const room = frame.socket.join(hashsplit[1]);
 
-    // Prevent default form submission page navigation
+    const streamCleanup = frame.subscribeToStream(topic, {
+        "new-thread": function (data) {
+            addThread(data);
+        },
+        "new-reply": function (data) {
+            addReply(data);
+        }
+    });
+
     dom(".new-post-form").on("submit", function (e) {
         if (e && typeof e.preventDefault === "function") {
             e.preventDefault();
         }
     });
 
-    const headerText = topicsMap[hashsplit[1]] || "Unknown";
-    dom(".topic-header").html("/" + hashsplit[1] + "/ - " + headerText);
+    const headerText = topicsMap[topic] || "Unknown";
+    dom(".topic-header").html("/" + topic + "/ - " + headerText);
 
     function toggleBlotter(e) {
         if (e && typeof e.preventDefault === "function") {
@@ -166,7 +187,7 @@ frame.controllers.service = function service(global, view) {
 
         if (thread.hasClass("show-replies") === false && replies.length() > 5) {
             const omitted = replies.length() - 5;
-            const href = "/" + hashsplit[1] + "/thread/" + hash;
+            const href = "/" + topic + "/thread/" + hash;
             summaryEl.html(
                 omitted +
                 " posts omitted. <span class=\"blue-text-link\" data-href=\"" +
@@ -286,32 +307,27 @@ frame.controllers.service = function service(global, view) {
             return global.alert("File size exceeds maximum allowed limit of 32 MB.");
         }
 
-        const rawName = (nameInput && nameInput.value) || "Anonymous";
-        const rawSub = (subjectInput && subjectInput.value) || "";
-        const rawOpt = (optionsInput && optionsInput.value) || "";
-        const rawCom = (commentInput && commentInput.value) || "";
+        const fd = createFormData();
+        fd.append("topic", topic);
+        fd.append("name", (nameInput && nameInput.value) || "Anonymous");
+        fd.append("subject", (subjectInput && subjectInput.value) || "");
+        fd.append("options", (optionsInput && optionsInput.value) || "");
+        fd.append("comment", (commentInput && commentInput.value) || "");
+        fd.append("file", file);
 
-        const schema = {
-            comment: rawCom,
-            file_mime: file.type,
-            file_name: file.name,
-            name: rawName,
-            options: rawOpt,
-            replies: {},
-            subject: rawSub,
-            taggedBy: [],
-            tagging: [],
-            topic: hashsplit[1],
-            type: "thread"
-        };
-
-        const reader = new FileReader();
-        reader.onload = function (evt) {
-            schema.file = evt.target.result;
-            room.send("new-thread", JSON.stringify(schema));
+        fetch("/api/threads", {
+            method: "POST",
+            body: fd
+        }).then(function (res) {
+            if (!res.ok) {
+                return res.text().then(function (errText) {
+                    global.alert("Posting failed: " + errText);
+                });
+            }
             clearForms();
-        };
-        reader.readAsDataURL(file);
+        }).catch(function (err) {
+            global.alert("Network error: " + err.message);
+        });
     }
 
     function postReply(e) {
@@ -321,13 +337,13 @@ frame.controllers.service = function service(global, view) {
         const replyboxVisible = dom(".reply-box").hasClass("hide") === false;
         const activeThreadList = replyBox.data("thread");
         const activeThread = Array.isArray(activeThreadList) ? activeThreadList[0] : activeThreadList;
-        const thread = (
+        const targetThread = (
             (replyboxVisible && activeThread)
             ? activeThread
-            : hashsplit[3]
+            : pathParts[2]
         );
 
-        if (!thread) {
+        if (!targetThread) {
             return global.alert("Unable to locate target thread ID for reply.");
         }
 
@@ -352,39 +368,29 @@ frame.controllers.service = function service(global, view) {
             return global.alert("File size exceeds maximum allowed limit of 8192 KB (8 MB).");
         }
 
-        const rawName = (nameInput && nameInput.value) || "Anonymous";
-        const rawOpt = (optionsInput && optionsInput.value) || "";
-
-        const schema = {
-            comment: rawComment,
-            name: rawName,
-            options: rawOpt,
-            taggedBy: [],
-            tagging: [],
-            thread,
-            topic: hashsplit[1],
-            type: "reply"
-        };
-
-        function submitReply() {
-            room.send("new-reply", JSON.stringify(schema));
-            clearForms();
-        }
-
+        const fd = createFormData();
+        fd.append("topic", topic);
+        fd.append("thread", targetThread);
+        fd.append("name", (nameInput && nameInput.value) || "Anonymous");
+        fd.append("options", (optionsInput && optionsInput.value) || "");
+        fd.append("comment", rawComment);
         if (files.length > 0) {
-            const file = files[0];
-            schema.file_name = file.name;
-            schema.file_mime = file.type;
-
-            const reader = new FileReader();
-            reader.onload = function (evt) {
-                schema.file = evt.target.result;
-                submitReply();
-            };
-            reader.readAsDataURL(file);
-        } else {
-            submitReply();
+            fd.append("file", files[0]);
         }
+
+        fetch("/api/replies", {
+            method: "POST",
+            body: fd
+        }).then(function (res) {
+            if (!res.ok) {
+                return res.text().then(function (errText) {
+                    global.alert("Posting reply failed: " + errText);
+                });
+            }
+            clearForms();
+        }).catch(function (err) {
+            global.alert("Network error: " + err.message);
+        });
     }
 
     if (isThreadView) {
@@ -431,11 +437,11 @@ frame.controllers.service = function service(global, view) {
         if (e && typeof e.preventDefault === "function") {
             e.preventDefault();
         }
-        const thread = getFirstData(getNode(e, node), "thread");
+        const threadId = getFirstData(getNode(e, node), "thread");
         const post = getNode(e, node).html()[0] || "";
 
-        replyBox.data("thread", thread);
-        replyBoxHeaderText.html(thread).attr("title", thread);
+        replyBox.data("thread", threadId);
+        replyBoxHeaderText.html(threadId).attr("title", threadId);
         replyBoxPost.off("click", postReply, false);
         replyBoxPost.on("click", postReply, false);
         dom(".reply-box-close").on("click", closeReplyBox, false);
@@ -450,15 +456,15 @@ frame.controllers.service = function service(global, view) {
     dom(".post-reply-to").on("click", openReplyBox, false);
 
     function initReplies(hash) {
-        const thread = dom("#post-" + hash);
-        const replies = thread.select(".reply-container");
-        const summaryEl = thread.select(".post-summary");
+        const threadDom = dom("#post-" + hash);
+        const replies = threadDom.select(".reply-container");
+        const summaryEl = threadDom.select(".post-summary");
 
         if (replies.length() > 0) {
             if (replies.length() > 5) {
                 const omitted = replies.length() - 5;
-                const href = "/" + hashsplit[1] + "/thread/" + hash;
-                thread.addClass("show-summary");
+                const href = "/" + topic + "/thread/" + hash;
+                threadDom.addClass("show-summary");
                 summaryEl.html(
                     omitted +
                     " posts omitted. <span class=\"blue-text-link\" data-href=\"" +
@@ -466,7 +472,7 @@ frame.controllers.service = function service(global, view) {
                     "\">Click here</span> to view."
                 );
             } else {
-                thread.addClass("show-replies");
+                threadDom.addClass("show-replies");
             }
         }
         frame.assignHrefs();
@@ -481,7 +487,7 @@ frame.controllers.service = function service(global, view) {
     }
 
     function goToTaggedPost(e) {
-        const tag = getFirstData(e.currentTarget, "tag");
+        const tag = getFirstData(e, "tag");
         if (!tag) {
             return;
         }
@@ -503,7 +509,7 @@ frame.controllers.service = function service(global, view) {
     }
 
     function hoverOutTag(e) {
-        const tag = getFirstData(e.currentTarget, "tag");
+        const tag = getFirstData(e, "tag");
         if (tag) {
             const tagged = dom("#post-" + tag);
             tagged.removeClass("highlight-hover");
@@ -512,7 +518,7 @@ frame.controllers.service = function service(global, view) {
     }
 
     function hoverOverTag(e) {
-        const tag = getFirstData(e.currentTarget, "tag");
+        const tag = getFirstData(e, "tag");
         if (!tag) {
             return;
         }
@@ -566,16 +572,8 @@ frame.controllers.service = function service(global, view) {
 
     bindPostTags();
 
-    function addThread(buffer) {
-        const rawData = decoder.decode(buffer);
-        let data;
-        try {
-            data = JSON.parse(rawData);
-        } catch (err) {
-            return;
-        }
-
-        if (!data.hash || document.getElementById("post-" + data.hash) !== null) {
+    function addThread(data) {
+        if (!data || !data.hash || document.getElementById("post-" + data.hash) !== null) {
             return;
         }
 
@@ -649,16 +647,8 @@ frame.controllers.service = function service(global, view) {
         frame.assignHrefs();
     }
 
-    function addReply(buffer) {
-        const rawData = decoder.decode(buffer);
-        let data;
-        try {
-            data = JSON.parse(rawData);
-        } catch (err) {
-            return;
-        }
-
-        if (!data.hash || document.getElementById("post-" + data.hash) !== null) {
+    function addReply(data) {
+        if (!data || !data.hash || document.getElementById("post-" + data.hash) !== null) {
             return;
         }
 
@@ -747,14 +737,10 @@ frame.controllers.service = function service(global, view) {
         initReplies(data.thread);
     }
 
-    room.off("new-reply", addReply);
-    room.off("new-thread", addThread);
-    room.on("new-reply", addReply);
-    room.on("new-thread", addThread);
-
     return function cleanup() {
-        room.off("new-reply", addReply);
-        room.off("new-thread", addThread);
+        if (typeof streamCleanup === "function") {
+            streamCleanup();
+        }
         dom(document.body).off("mousemove", dragging, false);
         dom(document.body).off("click");
     };
