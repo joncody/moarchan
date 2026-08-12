@@ -33,10 +33,14 @@ function getFirstData(nodeOrEvent, key) {
 }
 
 function createFormData() {
-    return new FormData();
+    return Reflect.construct(FormData, []);
 }
 
-frame.controllers.service = function service(global, view) {
+function createIsoDate() {
+    return Reflect.construct(Date, []).toISOString();
+}
+
+frame.controllers.service = function service(global) {
     const topicsMap = {
         "3": "3DCG",
         "a": "Anime & Manga",
@@ -114,11 +118,11 @@ frame.controllers.service = function service(global, view) {
     let mouseY;
 
     const streamCleanup = frame.subscribeToStream(topic, {
-        "new-thread": function (data) {
-            addThread(data);
-        },
         "new-reply": function (data) {
             addReply(data);
+        },
+        "new-thread": function (data) {
+            addThread(data);
         }
     });
 
@@ -190,7 +194,8 @@ frame.controllers.service = function service(global, view) {
             const href = "/" + topic + "/thread/" + hash;
             summaryEl.html(
                 omitted +
-                " posts omitted. <span class=\"blue-text-link\" data-href=\"" +
+                " posts omitted. " +
+                "<span class=\"blue-text-link\" data-href=\"" +
                 href +
                 "\">Click here</span> to view."
             );
@@ -275,7 +280,7 @@ frame.controllers.service = function service(global, view) {
         ];
         fields.forEach(function (selector) {
             dom(selector).each(function (el) {
-                if ("value" in el) {
+                if (el !== undefined && el.value !== undefined) {
                     el.value = "";
                 }
             });
@@ -304,7 +309,9 @@ frame.controllers.service = function service(global, view) {
         const file = files[0];
 
         if (file.size > 32 * 1024 * 1024) {
-            return global.alert("File size exceeds maximum allowed limit of 32 MB.");
+            return global.alert(
+                "File size exceeds maximum allowed limit of 32 MB."
+            );
         }
 
         const fd = createFormData();
@@ -316,8 +323,8 @@ frame.controllers.service = function service(global, view) {
         fd.append("file", file);
 
         fetch("/api/threads", {
-            method: "POST",
-            body: fd
+            body: fd,
+            method: "POST"
         }).then(function (res) {
             if (!res.ok) {
                 return res.text().then(function (errText) {
@@ -336,21 +343,33 @@ frame.controllers.service = function service(global, view) {
         }
         const replyboxVisible = dom(".reply-box").hasClass("hide") === false;
         const activeThreadList = replyBox.data("thread");
-        const activeThread = Array.isArray(activeThreadList) ? activeThreadList[0] : activeThreadList;
-        const targetThread = (
-            (replyboxVisible && activeThread)
-            ? activeThread
-            : pathParts[2]
-        );
-
-        if (!targetThread) {
-            return global.alert("Unable to locate target thread ID for reply.");
+        let activeThread = activeThreadList;
+        if (Array.isArray(activeThreadList)) {
+            activeThread = activeThreadList[0];
         }
 
-        const nameSel = replyboxVisible ? "#reply-box-name" : "#new-post-name";
-        const optSel = replyboxVisible ? "#reply-box-options" : "#new-post-options";
-        const comSel = replyboxVisible ? "#reply-box-comment" : "#new-post-comment";
-        const fileSel = replyboxVisible ? "#reply-box-file" : "#new-post-file";
+        let targetThread = pathParts[2];
+        if (replyboxVisible && activeThread) {
+            targetThread = activeThread;
+        }
+
+        if (!targetThread) {
+            return global.alert(
+                "Unable to locate target thread ID for reply."
+            );
+        }
+
+        let nameSel = "#new-post-name";
+        let optSel = "#new-post-options";
+        let comSel = "#new-post-comment";
+        let fileSel = "#new-post-file";
+
+        if (replyboxVisible) {
+            nameSel = "#reply-box-name";
+            optSel = "#reply-box-options";
+            comSel = "#reply-box-comment";
+            fileSel = "#reply-box-file";
+        }
 
         const nameInput = dom(nameSel).get(0);
         const optionsInput = dom(optSel).get(0);
@@ -365,7 +384,9 @@ frame.controllers.service = function service(global, view) {
         const files = (fileInput && fileInput.files) || [];
 
         if (files.length > 0 && files[0].size > 8192 * 1024) {
-            return global.alert("File size exceeds maximum allowed limit of 8192 KB (8 MB).");
+            return global.alert(
+                "File size exceeds maximum allowed limit of 8192 KB (8 MB)."
+            );
         }
 
         const fd = createFormData();
@@ -379,8 +400,8 @@ frame.controllers.service = function service(global, view) {
         }
 
         fetch("/api/replies", {
-            method: "POST",
-            body: fd
+            body: fd,
+            method: "POST"
         }).then(function (res) {
             if (!res.ok) {
                 return res.text().then(function (errText) {
@@ -446,7 +467,7 @@ frame.controllers.service = function service(global, view) {
         replyBoxPost.on("click", postReply, false);
         dom(".reply-box-close").on("click", closeReplyBox, false);
         const commentInput = dom("#reply-box-comment").get(0);
-        if (commentInput && "value" in commentInput) {
+        if (commentInput !== undefined && commentInput.value !== undefined) {
             commentInput.value = ">>" + post;
         }
         replyBox.removeClass("hide");
@@ -467,7 +488,8 @@ frame.controllers.service = function service(global, view) {
                 threadDom.addClass("show-summary");
                 summaryEl.html(
                     omitted +
-                    " posts omitted. <span class=\"blue-text-link\" data-href=\"" +
+                    " posts omitted. " +
+                    "<span class=\"blue-text-link\" data-href=\"" +
                     href +
                     "\">Click here</span> to view."
                 );
@@ -529,8 +551,9 @@ frame.controllers.service = function service(global, view) {
         }
 
         const rect = el.getBoundingClientRect();
-        const vHeight = global.innerHeight || document.documentElement.clientHeight;
-        const vWidth = global.innerWidth || document.documentElement.clientWidth;
+        const docEl = document.documentElement;
+        const vHeight = global.innerHeight || docEl.clientHeight;
+        const vWidth = global.innerWidth || docEl.clientWidth;
         const inview = (
             rect.top >= 0 &&
             rect.left >= 0 &&
@@ -573,48 +596,80 @@ frame.controllers.service = function service(global, view) {
     bindPostTags();
 
     function addThread(data) {
-        if (!data || !data.hash || document.getElementById("post-" + data.hash) !== null) {
+        if (!data || !data.hash) {
+            return;
+        }
+        if (document.getElementById("post-" + data.hash) !== null) {
             return;
         }
 
         const subject = data.subject || "";
         const name = data.name || "Anonymous";
-        const file_name = data.file_name || "";
-        const file_size = data.file_size || "0";
-        const file_dimensions = data.file_dimensions || "???x???";
+        const fileName = data.file_name || "";
+        const fileSize = data.file_size || "0";
+        const fileDimensions = data.file_dimensions || "???x???";
         const comment = data.comment || "";
-        const timestamp = data.timestamp || new Date().toISOString();
+        const timestamp = data.timestamp || createIsoDate();
 
         const htmlString = [
             "<div id=\"post-", data.hash, "\" class=\"thread\">",
             "<div class=\"post-show-hide-icons op\">",
-            "<img class=\"post-show-hide-thread plus\" data-post=\"", data.hash, "\" src=\"/static/images/show-hide-thread-plus-red.png\" alt=\"Plus\" title=\"Plus\" />",
-            "<img class=\"post-show-hide-thread minus\" data-post=\"", data.hash, "\" src=\"/static/images/show-hide-thread-minus-red.png\" alt=\"Minus\" title=\"Minus\" />",
+            "<img class=\"post-show-hide-thread plus\" data-post=\"",
+            data.hash,
+            "\" src=\"/static/images/show-hide-thread-plus-red.png\" ",
+            "alt=\"Plus\" title=\"Plus\" />",
+            "<img class=\"post-show-hide-thread minus\" data-post=\"",
+            data.hash,
+            "\" src=\"/static/images/show-hide-thread-minus-red.png\" ",
+            "alt=\"Minus\" title=\"Minus\" />",
             "</div>",
             "<div class=\"post-image-metadata op\">",
-            "File: <a class=\"post-image-link blue-text-link op\" href=\"/static/images/uploads/", file_name, "\" alt=\"", file_name, "\" title=\"", file_name, "\" target=\"_blank\">", file_name, "</a>",
-            "<span class=\"post-image-dimensions op\">(", file_size, " KB, ", file_dimensions, ")</span>",
+            "File: <a class=\"post-image-link blue-text-link op\" ",
+            "href=\"/static/images/uploads/", fileName, "\" ",
+            "alt=\"", fileName, "\" title=\"", fileName, "\" ",
+            "target=\"_blank\">", fileName, "</a>",
+            "<span class=\"post-image-dimensions op\">(",
+            fileSize, " KB, ", fileDimensions, ")</span>",
             "</div>",
-            "<a class=\"post-image-container op\" href=\"/static/images/uploads/", file_name, "\" target=\"_blank\">",
-            "<img class=\"post-image op\" src=\"/static/images/uploads/", file_name, "\" alt=\"", file_name, "\" title=\"", file_name, "\" />",
+            "<a class=\"post-image-container op\" ",
+            "href=\"/static/images/uploads/", fileName, "\" target=\"_blank\">",
+            "<img class=\"post-image op\" ",
+            "src=\"/static/images/uploads/", fileName, "\" ",
+            "alt=\"", fileName, "\" title=\"", fileName, "\" />",
             "</a>",
             "<div class=\"post-header op\">",
             "<input class=\"post-checkbox op\" type=\"checkbox\" />",
             "<span class=\"post-subject op\">", subject, "</span>",
             "<span class=\"post-username op\">", name, "</span>",
             "<span class=\"post-date op\">", timestamp, "</span>",
-            "<span class=\"post-link-to red-text-link op\" title=\"Link to this post\" data-href=\"/", data.topic, "/thread/", data.hash, "\">No.</span>",
-            "<span class=\"post-reply-to red-text-link op\" title=\"Reply to this post\" data-thread=\"", data.hash, "\">", data.hash, "</span>",
-            "<img class=\"post-thumbtack op\" src=\"/static/images/thumbtack.gif\" alt=\"Sticky\" title=\"Sticky\" />",
-            "<img class=\"post-lock op\" src=\"/static/images/lock.gif\" alt=\"Closed\" title=\"Closed\" />",
-            "<span class=\"post-reply-to-text op\">[<span class=\"reply-link blue-text-link\" data-href=\"/", data.topic, "/thread/", data.hash, "\">Reply</span>]</span>",
+            "<span class=\"post-link-to red-text-link op\" ",
+            "title=\"Link to this post\" data-href=\"/",
+            data.topic, "/thread/", data.hash, "\">No.</span>",
+            "<span class=\"post-reply-to red-text-link op\" ",
+            "title=\"Reply to this post\" data-thread=\"",
+            data.hash, "\">", data.hash, "</span>",
+            "<img class=\"post-thumbtack op\" ",
+            "src=\"/static/images/thumbtack.gif\" ",
+            "alt=\"Sticky\" title=\"Sticky\" />",
+            "<img class=\"post-lock op\" ",
+            "src=\"/static/images/lock.gif\" ",
+            "alt=\"Closed\" title=\"Closed\" />",
+            "<span class=\"post-reply-to-text op\">[",
+            "<span class=\"reply-link blue-text-link\" data-href=\"/",
+            data.topic, "/thread/", data.hash, "\">Reply</span>]</span>",
             "<div class=\"post-options op\" title=\"Post menu\">",
-            "<span class=\"post-options-arrow op\" data-post=\"", data.hash, "\"></span>",
-            "<ul id=\"post-menu-", data.hash, "\" class=\"post-options-menu hide op\">",
-            "<li class=\"report-post op\" data-post=\"", data.hash, "\">Report Thread</li>",
-            "<li class=\"hide-post op\" data-post=\"", data.hash, "\">Hide Thread</li>",
-            "<li class=\"unhide-post op\" data-post=\"", data.hash, "\">Unhide Thread</li>",
-            "<li class=\"image-search op\" data-post=\"", data.hash, "\">Image Search &gt;&gt;</li>",
+            "<span class=\"post-options-arrow op\" data-post=\"",
+            data.hash, "\"></span>",
+            "<ul id=\"post-menu-", data.hash, "\" ",
+            "class=\"post-options-menu hide op\">",
+            "<li class=\"report-post op\" data-post=\"",
+            data.hash, "\">Report Thread</li>",
+            "<li class=\"hide-post op\" data-post=\"",
+            data.hash, "\">Hide Thread</li>",
+            "<li class=\"unhide-post op\" data-post=\"",
+            data.hash, "\">Unhide Thread</li>",
+            "<li class=\"image-search op\" data-post=\"",
+            data.hash, "\">Image Search &gt;&gt;</li>",
             "</ul>",
             "</div>",
             "</div>",
@@ -622,10 +677,19 @@ frame.controllers.service = function service(global, view) {
             "<p class=\"post-content op\">", comment, "</p>",
             "<div class=\"post-summary-container\">",
             "<div class=\"post-show-hide-icons replies\">",
-            "<img class=\"post-show-hide-replies plus\" data-post=\"", data.hash, "\" src=\"/static/images/show-hide-thread-plus-red.png\" alt=\"Plus\" title=\"Plus\" />",
-            "<img class=\"post-show-hide-replies minus\" data-post=\"", data.hash, "\" src=\"/static/images/show-hide-thread-minus-red.png\" alt=\"Minus\" title=\"Minus\" />",
+            "<img class=\"post-show-hide-replies plus\" data-post=\"",
+            data.hash,
+            "\" src=\"/static/images/show-hide-thread-plus-red.png\" ",
+            "alt=\"Plus\" title=\"Plus\" />",
+            "<img class=\"post-show-hide-replies minus\" data-post=\"",
+            data.hash,
+            "\" src=\"/static/images/show-hide-thread-minus-red.png\" ",
+            "alt=\"Minus\" title=\"Minus\" />",
             "</div>",
-            "<p class=\"post-summary\">0 posts omitted. <span class=\"blue-text-link\" data-href=\"/", data.topic, "/thread/", data.hash, "\">Click here</span> to view.</p>",
+            "<p class=\"post-summary\">0 posts omitted. ",
+            "<span class=\"blue-text-link\" data-href=\"/",
+            data.topic, "/thread/", data.hash,
+            "\">Click here</span> to view.</p>",
             "</div>",
             "</div>",
             "<div class=\"spacer\"></div>",
@@ -637,25 +701,43 @@ frame.controllers.service = function service(global, view) {
             boardEl.insertAdjacentHTML("beforeend", htmlString);
         }
         const threadEl = dom("#post-" + data.hash);
-        threadEl.selectAll(".post-show-hide-thread").on("click", toggleThread, false);
-        threadEl.selectAll(".post-show-hide-replies").on("click", toggleReplies, false);
+        threadEl.selectAll(".post-show-hide-thread").on(
+            "click",
+            toggleThread,
+            false
+        );
+        threadEl.selectAll(".post-show-hide-replies").on(
+            "click",
+            toggleReplies,
+            false
+        );
         threadEl.selectAll(".hide-post").on("click", hidePost, false);
         threadEl.selectAll(".unhide-post").on("click", unhidePost, false);
-        threadEl.selectAll(".post-options-arrow").on("click", showPostOptions, false);
+        threadEl.selectAll(".post-options-arrow").on(
+            "click",
+            showPostOptions,
+            false
+        );
         threadEl.selectAll(".post-reply-to").on("click", openReplyBox, false);
         bindPostTags();
         frame.assignHrefs();
     }
 
     function addReply(data) {
-        if (!data || !data.hash || document.getElementById("post-" + data.hash) !== null) {
+        if (!data || !data.hash) {
+            return;
+        }
+        if (document.getElementById("post-" + data.hash) !== null) {
             return;
         }
 
         if (Array.isArray(data.tagging)) {
             data.tagging.forEach(function (tag) {
                 const isOp = (tag === data.thread);
-                const opClass = isOp ? " op" : "";
+                let opClass = "";
+                if (isOp) {
+                    opClass = " op";
+                }
                 const tagEl = (
                     "<span class=\"post-tag blue-text-link" +
                     opClass +
@@ -680,18 +762,32 @@ frame.controllers.service = function service(global, view) {
             const dims = data.file_dimensions || "???x???";
             fileBlock = [
                 "<div class=\"post-image-metadata\">",
-                "File: <a class=\"post-image-link blue-text-link\" href=\"/static/images/uploads/", fileNameEscaped, "\" alt=\"", fileNameEscaped, "\" title=\"", fileNameEscaped, "\" target=\"_blank\">", fileNameEscaped, "</a>",
-                "<span class=\"post-image-dimensions\">(", fileSizeKb, " KB, ", dims, ")</span>",
+                "File: <a class=\"post-image-link blue-text-link\" ",
+                "href=\"/static/images/uploads/", fileNameEscaped, "\" ",
+                "alt=\"", fileNameEscaped, "\" ",
+                "title=\"", fileNameEscaped, "\" ",
+                "target=\"_blank\">", fileNameEscaped, "</a>",
+                "<span class=\"post-image-dimensions\">(",
+                fileSizeKb, " KB, ", dims, ")</span>",
                 "</div>",
-                "<a class=\"post-image-container\" href=\"/static/images/uploads/", fileNameEscaped, "\" target=\"_blank\">",
-                "<img class=\"post-image\" src=\"/static/images/uploads/", fileNameEscaped, "\" title=\"", fileNameEscaped, "\" alt=\"", fileNameEscaped, "\" />",
+                "<a class=\"post-image-container\" ",
+                "href=\"/static/images/uploads/", fileNameEscaped, "\" ",
+                "target=\"_blank\">",
+                "<img class=\"post-image\" ",
+                "src=\"/static/images/uploads/", fileNameEscaped, "\" ",
+                "title=\"", fileNameEscaped, "\" ",
+                "alt=\"", fileNameEscaped, "\" />",
                 "</a>"
             ].join("");
         }
 
         let imgSearchBlock = "";
         if (data.file_name) {
-            imgSearchBlock = "<li class=\"image-search\" data-post=\"" + data.hash + "\">Image Search &gt;&gt;</li>";
+            imgSearchBlock = (
+                "<li class=\"image-search\" data-post=\"" +
+                data.hash +
+                "\">Image Search &gt;&gt;</li>"
+            );
         }
 
         const replyHtml = [
@@ -701,16 +797,28 @@ frame.controllers.service = function service(global, view) {
             "<div id=\"post-", data.hash, "\" class=\"reply\">",
             "<div class=\"post-header\">",
             "<input class=\"post-checkbox\" type=\"checkbox\" />",
-            "<span class=\"post-username\">", (data.name || "Anonymous"), "</span>",
-            "<span class=\"post-date\">", (data.timestamp || new Date().toISOString()), "</span>",
-            "<span class=\"post-link-to red-text-link\" title=\"Link to this post\">No.</span>",
-            "<span class=\"post-reply-to red-text-link\" title=\"Reply to this post\" data-thread=\"", data.thread, "\">", data.hash, "</span>",
+            "<span class=\"post-username\">",
+            (data.name || "Anonymous"),
+            "</span>",
+            "<span class=\"post-date\">",
+            (data.timestamp || createIsoDate()),
+            "</span>",
+            "<span class=\"post-link-to red-text-link\" ",
+            "title=\"Link to this post\">No.</span>",
+            "<span class=\"post-reply-to red-text-link\" ",
+            "title=\"Reply to this post\" data-thread=\"",
+            data.thread, "\">", data.hash, "</span>",
             "<div class=\"post-options\" title=\"Post menu\">",
-            "<span class=\"post-options-arrow\" data-post=\"", data.hash, "\"></span>",
-            "<ul id=\"post-menu-", data.hash, "\" class=\"post-options-menu hide\">",
-            "<li class=\"report-post\" data-post=\"", data.hash, "\">Report Post</li>",
-            "<li class=\"hide-post\" data-post=\"", data.hash, "\">Hide Post</li>",
-            "<li class=\"unhide-post\" data-post=\"", data.hash, "\">Unhide Post</li>",
+            "<span class=\"post-options-arrow\" data-post=\"",
+            data.hash, "\"></span>",
+            "<ul id=\"post-menu-", data.hash, "\" ",
+            "class=\"post-options-menu hide\">",
+            "<li class=\"report-post\" data-post=\"",
+            data.hash, "\">Report Post</li>",
+            "<li class=\"hide-post\" data-post=\"",
+            data.hash, "\">Hide Post</li>",
+            "<li class=\"unhide-post\" data-post=\"",
+            data.hash, "\">Unhide Post</li>",
             imgSearchBlock,
             "</ul>",
             "</div>",
@@ -722,7 +830,9 @@ frame.controllers.service = function service(global, view) {
             "</div>"
         ].join("");
 
-        const threadContainer = dom("#post-" + data.thread + " .thread-container");
+        const threadContainer = dom(
+            "#post-" + data.thread + " .thread-container"
+        );
         if (threadContainer.length() > 0) {
             threadContainer.get(0).insertAdjacentHTML("beforeend", replyHtml);
         }
@@ -730,7 +840,11 @@ frame.controllers.service = function service(global, view) {
         const replyEl = dom("#post-" + data.hash);
         replyEl.selectAll(".hide-post").on("click", hidePost, false);
         replyEl.selectAll(".unhide-post").on("click", unhidePost, false);
-        replyEl.selectAll(".post-options-arrow").on("click", showPostOptions, false);
+        replyEl.selectAll(".post-options-arrow").on(
+            "click",
+            showPostOptions,
+            false
+        );
         replyEl.selectAll(".post-reply-to").on("click", openReplyBox, false);
 
         bindPostTags();

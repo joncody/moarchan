@@ -1,142 +1,197 @@
-"use strict";
-
-function get_global_environment() {
-    if (typeof globalThis !== "undefined") {
+function getGlobalEnvironment() {
+    if (globalThis !== undefined) {
         return globalThis;
     }
-    if (typeof window !== "undefined") {
+    if (window !== undefined) {
         return window;
     }
     return undefined;
 }
 
-const global_env = get_global_environment();
+const globalEnv = getGlobalEnvironment();
 
-const app = {
-    activeCleanups: [],
-    base: document.querySelector("[data-base]"),
-    controllers: {},
-    path: "/",
-    hrefs: document.querySelectorAll("[data-href]")
-};
+function createApplication() {
+    let activeCleanups = [];
+    const controllers = Object.create(null);
+    let path = "/";
 
-function navigate(e) {
-    if (e && e.currentTarget && e.currentTarget.dataset && e.currentTarget.dataset.href) {
-        e.preventDefault();
-        const href = e.currentTarget.dataset.href;
-        if (global_env.location.pathname !== href) {
-            global_env.history.pushState(null, "", href);
+    function runCleanups() {
+        if (Array.isArray(activeCleanups)) {
+            activeCleanups.forEach(function (fn) {
+                if (typeof fn === "function") {
+                    fn();
+                }
+            });
+        }
+        activeCleanups = [];
+    }
+
+    function createEventSource(url) {
+        return Reflect.construct(EventSource, [url]);
+    }
+
+    function createError(message) {
+        return Reflect.construct(Error, [message]);
+    }
+
+    function navigate(event) {
+        if (
+            event === undefined ||
+            event.currentTarget === null ||
+            event.currentTarget.dataset === undefined ||
+            event.currentTarget.dataset.href === undefined
+        ) {
+            return;
+        }
+
+        event.preventDefault();
+        const href = event.currentTarget.dataset.href;
+        if (globalEnv.location.pathname !== href) {
+            globalEnv.history.pushState(null, "", href);
             loadRoute(href);
         }
     }
-}
 
-function assignHrefs() {
-    app.hrefs.forEach(function (el) {
-        el.removeEventListener("click", navigate);
-    });
-    app.hrefs = document.querySelectorAll("[data-href]");
-    app.hrefs.forEach(function (el) {
-        el.addEventListener("click", navigate);
-    });
-}
+    function assignHrefs() {
+        const oldHrefs = document.querySelectorAll("[data-href]");
+        oldHrefs.forEach(function (el) {
+            el.removeEventListener("click", navigate);
+        });
 
-app.assignHrefs = assignHrefs;
-
-function runCleanups() {
-    if (Array.isArray(app.activeCleanups)) {
-        app.activeCleanups.forEach(function (fn) {
-            if (typeof fn === "function") {
-                fn();
-            }
+        const newHrefs = document.querySelectorAll("[data-href]");
+        newHrefs.forEach(function (el) {
+            el.addEventListener("click", navigate);
         });
     }
-    app.activeCleanups = [];
-}
 
-function loadRoute(path) {
-    app.path = path || global_env.location.pathname;
+    function renderError(message) {
+        const base = document.querySelector("[data-base]");
+        if (base === null) {
+            return;
+        }
+        const safeMsg = message || "An unexpected error occurred.";
+        base.innerHTML = (
+            "<div class=\"page\"><div class=\"pink-section\">" +
+            "<h3 class=\"box-header pink-header\">Error</h3>" +
+            "<p class=\"box-message\">" +
+            safeMsg +
+            "</p></div></div>"
+        );
+        assignHrefs();
+    }
 
-    fetch("/api/render?path=" + encodeURIComponent(app.path), {
-        headers: {
-            "X-Requested-With": "XMLHttpRequest"
-        }
-    }).then(function (response) {
-        if (!response.ok) {
-            return response.json().then(function (errData) {
-                throw new Error(errData.error || ("Error " + response.status));
-            }).catch(function () {
-                throw new Error("Error " + response.status);
-            });
-        }
-        return response.json();
-    }).then(function (msg) {
+    function handleRenderSuccess(msg) {
         runCleanups();
 
-        app.base.innerHTML = msg.template;
+        const base = document.querySelector("[data-base]");
+        if (base !== null) {
+            base.innerHTML = msg.template;
+        }
+
         assignHrefs();
 
         if (Array.isArray(msg.controllers)) {
-            msg.controllers.forEach(function (c) {
+            msg.controllers.forEach(function (name) {
                 if (
                     Object.prototype.hasOwnProperty.call(
-                        app.controllers,
-                        c
+                        controllers,
+                        name
                     )
                 ) {
-                    const cleanupFn = app.controllers[c](
-                        global_env,
+                    const cleanupFn = controllers[name](
+                        globalEnv,
                         msg.template
                     );
                     if (typeof cleanupFn === "function") {
-                        app.activeCleanups.push(cleanupFn);
+                        activeCleanups.push(cleanupFn);
                     }
                 }
             });
         }
-    }).catch(function (err) {
-        runCleanups();
-        app.base.innerHTML = (
-            "<div class=\"page\"><div class=\"pink-section\">" +
-            "<h3 class=\"box-header pink-header\">Error</h3><p class=\"box-message\">" +
-            (err.message || "An unexpected error occurred.") +
-            "</p></div></div>"
-        );
-        assignHrefs();
-    });
-}
+    }
 
-global_env.addEventListener("popstate", function () {
-    loadRoute(global_env.location.pathname);
-});
+    function loadRoute(targetPath) {
+        if (typeof targetPath === "string" && targetPath.length > 0) {
+            path = targetPath;
+        } else if (globalEnv !== undefined && globalEnv.location) {
+            path = globalEnv.location.pathname;
+        }
 
-function createEventSource(url) {
-    return new EventSource(url);
-}
+        const endpoint = "/api/render?path=" + encodeURIComponent(path);
 
-app.subscribeToStream = function (topic, handlers) {
-    const sse = createEventSource("/api/stream?topic=" + encodeURIComponent(topic));
-
-    if (handlers && typeof handlers === "object") {
-        Object.keys(handlers).forEach(function (eventType) {
-            sse.addEventListener(eventType, function (e) {
-                try {
-                    const data = JSON.parse(e.data);
-                    handlers[eventType](data);
-                } catch (err) {
-                    console.error("SSE JSON parse error: ", err);
-                }
-            });
+        fetch(endpoint, {
+            headers: {
+                "X-Requested-With": "XMLHttpRequest"
+            }
+        }).then(function (response) {
+            if (!response.ok) {
+                return response.json().then(function (errData) {
+                    const msg = errData.error || (
+                        "Error " + response.status
+                    );
+                    throw createError(msg);
+                }).catch(function () {
+                    throw createError("Error " + response.status);
+                });
+            }
+            return response.json();
+        }).then(function (msg) {
+            handleRenderSuccess(msg);
+        }).catch(function (err) {
+            runCleanups();
+            renderError(err.message);
         });
     }
 
-    return function cleanup() {
-        sse.close();
-    };
-};
+    function subscribeToStream(topic, handlers) {
+        const url = "/api/stream?topic=" + encodeURIComponent(topic);
+        const sse = createEventSource(url);
 
-(function init() {
-    loadRoute(global_env.location.pathname);
-}());
+        if (handlers !== null && typeof handlers === "object") {
+            Object.keys(handlers).forEach(function (eventType) {
+                sse.addEventListener(eventType, function (e) {
+                    try {
+                        const data = JSON.parse(e.data);
+                        handlers[eventType](data);
+                    } catch (err) {
+                        console.error("SSE JSON parse error: ", err);
+                    }
+                });
+            });
+        }
 
-export default app;
+        return function cleanup() {
+            sse.close();
+        };
+    }
+
+    function init() {
+        if (globalEnv !== undefined && globalEnv.addEventListener) {
+            globalEnv.addEventListener("popstate", function () {
+                loadRoute(globalEnv.location.pathname);
+            });
+        }
+        const initialPath = (
+            globalEnv !== undefined
+            ? globalEnv.location.pathname
+            : "/"
+        );
+        loadRoute(initialPath);
+    }
+
+    init();
+
+    return Object.freeze({
+        assignHrefs,
+        controllers,
+        getPath: function () {
+            return path;
+        },
+        loadRoute,
+        subscribeToStream
+    });
+}
+
+const app = createApplication();
+
+export default Object.freeze(app);
