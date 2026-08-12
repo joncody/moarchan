@@ -15,6 +15,10 @@ function createApplication() {
     const controllers = Object.create(null);
     let path = "/";
 
+    const router = {
+        loadRoute: undefined
+    };
+
     function runCleanups() {
         if (Array.isArray(activeCleanups)) {
             activeCleanups.forEach(function (fn) {
@@ -48,7 +52,9 @@ function createApplication() {
         const href = event.currentTarget.dataset.href;
         if (globalEnv.location.pathname !== href) {
             globalEnv.history.pushState(null, "", href);
-            loadRoute(href);
+            if (typeof router.loadRoute === "function") {
+                router.loadRoute(href);
+            }
         }
     }
 
@@ -142,6 +148,8 @@ function createApplication() {
             renderError(err.message);
         });
     }
+
+    router.loadRoute = loadRoute;
 
     function subscribeToStream(topic, handlers) {
         const url = "/api/stream?topic=" + encodeURIComponent(topic);

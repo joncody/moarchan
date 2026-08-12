@@ -117,15 +117,6 @@ frame.controllers.service = function service(global) {
     let mouseX;
     let mouseY;
 
-    const streamCleanup = frame.subscribeToStream(topic, {
-        "new-reply": function (data) {
-            addReply(data);
-        },
-        "new-thread": function (data) {
-            addThread(data);
-        }
-    });
-
     dom(".new-post-form").on("submit", function (e) {
         if (e && typeof e.preventDefault === "function") {
             e.preventDefault();
@@ -850,6 +841,15 @@ frame.controllers.service = function service(global) {
         bindPostTags();
         initReplies(data.thread);
     }
+
+    const streamCleanup = frame.subscribeToStream(topic, {
+        "new-reply": function (data) {
+            addReply(data);
+        },
+        "new-thread": function (data) {
+            addThread(data);
+        }
+    });
 
     return function cleanup() {
         if (typeof streamCleanup === "function") {
