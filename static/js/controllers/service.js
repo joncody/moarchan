@@ -32,14 +32,6 @@ function getFirstData(nodeOrEvent, key) {
     return dataVal;
 }
 
-function createFormData() {
-    return Reflect.construct(FormData, []);
-}
-
-function createIsoDate() {
-    return Reflect.construct(Date, []).toISOString();
-}
-
 frame.controllers.service = function service(global) {
     const topicsMap = {
         "3": "3DCG",
@@ -305,7 +297,7 @@ frame.controllers.service = function service(global) {
             );
         }
 
-        const fd = createFormData();
+        const fd = new FormData();
         fd.append("topic", topic);
         fd.append("name", (nameInput && nameInput.value) || "Anonymous");
         fd.append("subject", (subjectInput && subjectInput.value) || "");
@@ -380,7 +372,7 @@ frame.controllers.service = function service(global) {
             );
         }
 
-        const fd = createFormData();
+        const fd = new FormData();
         fd.append("topic", topic);
         fd.append("thread", targetThread);
         fd.append("name", (nameInput && nameInput.value) || "Anonymous");
@@ -600,7 +592,7 @@ frame.controllers.service = function service(global) {
         const fileSize = data.file_size || "0";
         const fileDimensions = data.file_dimensions || "???x???";
         const comment = data.comment || "";
-        const timestamp = data.timestamp || createIsoDate();
+        const timestamp = data.timestamp || new Date().toISOString();
 
         const htmlString = [
             "<div id=\"post-", data.hash, "\" class=\"thread\">",
@@ -792,7 +784,7 @@ frame.controllers.service = function service(global) {
             (data.name || "Anonymous"),
             "</span>",
             "<span class=\"post-date\">",
-            (data.timestamp || createIsoDate()),
+            (data.timestamp || new Date().toISOString()),
             "</span>",
             "<span class=\"post-link-to red-text-link\" ",
             "title=\"Link to this post\">No.</span>",

@@ -30,14 +30,6 @@ function createApplication() {
         activeCleanups = [];
     }
 
-    function createEventSource(url) {
-        return Reflect.construct(EventSource, [url]);
-    }
-
-    function createError(message) {
-        return Reflect.construct(Error, [message]);
-    }
-
     function navigate(event) {
         if (
             event === undefined ||
@@ -135,9 +127,9 @@ function createApplication() {
                     const msg = errData.error || (
                         "Error " + response.status
                     );
-                    throw createError(msg);
+                    throw new Error(msg);
                 }).catch(function () {
-                    throw createError("Error " + response.status);
+                    throw new Error("Error " + response.status);
                 });
             }
             return response.json();
@@ -153,7 +145,7 @@ function createApplication() {
 
     function subscribeToStream(topic, handlers) {
         const url = "/api/stream?topic=" + encodeURIComponent(topic);
-        const sse = createEventSource(url);
+        const sse = new EventSource(url);
 
         if (handlers !== null && typeof handlers === "object") {
             Object.keys(handlers).forEach(function (eventType) {
