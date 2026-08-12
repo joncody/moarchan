@@ -1,46 +1,27 @@
-// main.go
 package main
 
 import (
 	"log"
-	"os"
-	"os/signal"
-	"syscall"
+	"net/http"
 
-	"github.com/joncody/roomer"
 	"moarchan/frame"
 )
 
-func testHandler(app *frame.App, c *roomer.Conn, msg *roomer.Message, matches []string) {
+func testHandler(app *frame.App, w http.ResponseWriter, r *http.Request, matches []string) {
 	log.Printf("Test route matched: %v", matches)
-	app.Render(c, msg, "index-added", []string{"index"}, nil)
 }
 
 func main() {
-	// Initialize app
-	app, err := frame.NewApp("./config.json")
+	app, err := frame.NewApp()
 	if err != nil {
 		log.Fatalf("Failed to initialize app: %v", err)
 	}
-	// Add dynamic routes
-	if err := app.AddRoute(`^/test/(.*)$`, testHandler); err != nil {
-		log.Fatalf("Failed to add route: %v", err)
-	}
-	// Handle graceful shutdown
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	// Start server in a goroutine so we can wait for signals
-	go func() {
-		if err := app.Start(); err != nil {
-			log.Printf("Server error: %v", err)
-		}
-		// Optionally: close channel to signal exit
-	}()
-	// Wait for interrupt signal
-	<-sigChan
-	log.Println(" Shutting down...")
-	// Clean up resources
-	if err := app.Close(); err != nil {
-		log.Printf("Error during shutdown: %v", err)
+
+	// Programmatic Route Declarations
+	app.Route("/").Template("index").Controller("index")
+	app.Route(`^/test/(.*)$`).Template("index-added").Controller("index")
+
+	if err := app.Start(); err != nil {
+		log.Fatalf("Server error: %v", err)
 	}
 }
