@@ -56,7 +56,7 @@ frame.controllers.service = function service(global) {
         const boardEl = dom(".board").get(0);
         if (boardEl) {
             const html = data.html || renderer.renderThread(data);
-            boardEl.insertAdjacentHTML("beforeend", html);
+            boardEl.insertAdjacentHTML("afterbegin", html);
             const threadEl = dom("#post-" + data.hash);
             postActions.bindThreadEvents(threadEl);
             tagHover.bindTags();
@@ -76,6 +76,18 @@ frame.controllers.service = function service(global) {
             postActions.bindReplyEvents(replyEl);
             tagHover.bindTags();
             postActions.initReplies(data.thread);
+
+            // In topic board view, bump thread to top of feed unless 'sage' is specified
+            if (!isThreadView) {
+                const isSage = (data.options && data.options.toLowerCase().indexOf("sage") !== -1);
+                if (!isSage) {
+                    const boardEl = dom(".board").get(0);
+                    const threadEl = document.getElementById("post-" + data.thread);
+                    if (boardEl && threadEl) {
+                        boardEl.insertBefore(threadEl, boardEl.firstChild);
+                    }
+                }
+            }
         }
     }
 

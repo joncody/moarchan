@@ -1,18 +1,25 @@
 # moarchan
 
-A high-performance, real-time 4chan clone built from scratch using **Go**, **HTTP/2**, **Server-Sent Events (SSE)**, **PostgreSQL**, and **Vanilla JavaScript** (strictly following Douglas Crockford's coding standards).
+A high-performance, real-time 4chan clone built from scratch using **Go**, **HTTP/2**, **Server-Sent Events (SSE)**, **PostgreSQL (`LISTEN / NOTIFY`)**, and **Vanilla JavaScript** (strictly following Douglas Crockford's coding standards).
 
 ---
 
 ## 🚀 Key Features
 
-* **HTTP/2 & Server-Sent Events (SSE):** Real-time thread and reply updates stream multiplexed over a single TCP connection without WebSockets.
-* **Pure Crockfordian JavaScript:** Client-side SPA runtime written with zero usage of `this`, `class`, `var`, `new` (in application code), or `void` operators.
-* **HTML5 History API Routing:** Clean URLs (`/g`, `/g/thread/a1b2c3d4e`) with deep-linking support and History API navigation.
-* **Decoupled Engine (`frame`):** Core framework (`frame`) provides session management, middleware pipelines, dynamic routing, and an SSE event hub independent of domain logic.
-* **Relational PostgreSQL Persistence:** Normalized database schema (`boards`, `threads`, `posts`) with `FOR UPDATE` transaction locks to prevent concurrency race conditions.
-* **Native Multipart Uploads:** Memory-efficient image uploads (`multipart/form-data`) with binary header MIME verification and file extension whitelisting.
-* **OWASP Hardened:** Includes Slowloris protection (`ReadHeaderTimeout`), XSS sanitization, timing-attack resistant password verification (`bcrypt`), and security headers (`X-Frame-Options`, `X-Content-Type-Options`).
+* **HTTP/2 & Real-Time SSE Bus:** Multiplexed Server-Sent Events distributed horizontally across Go instances using PostgreSQL `LISTEN / NOTIFY` with compact JSON payloads.
+* **Pure Crockfordian JavaScript:** Modular client-side SPA runtime written with zero usage of `this`, `class`, `var`, `new` (in application code), or `void` operators.
+* **Componentized Frontend Architecture:** Decomposed into dedicated ES modules (`post-renderer`, `tag-hover`, `reply-box`, `post-actions`, `post-form`) with explicit lifecycle teardowns to prevent memory leaks.
+* **In-Place Image Expansion:** Clickable thumbnail expansion within the feed and thread views, with filename links directly opening raw full-resolution uploads in a new tab.
+* **Chronological Bumping & Sage:** Real-time thread bumping with `bumped_at` timestamps, chronological reply ordering via `jsonb_agg`, and `sage` bypass support.
+* **HTML5 History API Routing:** Clean URLs (`/g`, `/g/thread/a1b2c3d4e`) with deep-linking support and History API client navigation.
+* **Decoupled Engine (`frame`):** Core framework provides session management, middleware pipelines, dynamic routing, and an SSE event hub independent of domain logic.
+* **Protected Deletions & File Cleanup:** Post and file deletion secured with bcrypt password verification (or admin override), with automatic disk cleanup of orphaned cascade files.
+* **OWASP Hardened:** Includes Slowloris protection (`ReadHeaderTimeout`), image dimension bombs defense (10000x10000px bounds validation), XSS sanitization, timing-attack resistant password verification (`bcrypt`), and security headers.
+
+---
+
+> **⚠️ Note on User Accounts / Authentication:**  
+> The login and registration system (`/auth`, `frame/auth.go`) is included strictly as a **functional demonstration** of the underlying `frame` framework's session management, cookie encryption, and bcrypt capabilities. True to traditional imageboard culture, all board browsing, thread creation, and replying remain completely open, anonymous, and account-free by default.
 
 ---
 
@@ -102,27 +109,35 @@ docker-compose up --build
 ```
 .
 ├── main.go               # Application entrypoint & HTTP REST handlers
-├── db_store.go           # Relational DB schema & Moarchan SQL queries
+├── db_store.go           # Relational DB schema, migrations & queries
 ├── docker-compose.yml    # Container orchestration setup
 ├── .env                  # Local environment configuration (git-ignored)
 ├── frame/                # Standalone micro-framework
 │   ├── frame.go          # Core app lifecycle & DB connection pool
 │   ├── routes.go         # Fluent route builder & template renderer
-│   ├── sse.go            # Thread-safe EventSource hub & keep-alives
+│   ├── sse.go            # Distributed Postgres LISTEN/NOTIFY SSE hub
 │   ├── middleware.go     # Logging, Panic Recovery, Security headers
 │   ├── db.go             # Generic KV document database helpers
-│   ├── auth.go           # Bcrypt user authentication
+│   ├── auth.go           # Bcrypt user authentication (Demo)
 │   └── session.go        # Secure Gorilla cookie sessions
 └── static/
-    ├── css/              # Reset & screen stylesheet rules
+    ├── css/              # Reset, post, thread, reply & screen stylesheet rules
     ├── images/           # Application graphics & upload directory
     │   └── uploads/      # Image uploads (git-ignored)
     ├── js/
     │   ├── frame.js      # Crockfordian SPA runtime (History API + SSE)
     │   ├── dom.js        # Lightweight DOM manipulation library
+    │   ├── components/   # Modular UI components
+    │   │   ├── topics-map.js     # Board slugs & descriptions map
+    │   │   ├── post-renderer.js  # JSON-to-DOM HTML builder
+    │   │   ├── tag-hover.js      # Quote preview tooltips & jump links
+    │   │   ├── reply-box.js      # Draggable Quick Reply modal
+    │   │   ├── post-actions.js   # Collapse, hide, & in-place image expansion
+    │   │   └── post-form.js      # Form submissions & validation
     │   └── controllers/
+    │       ├── auth.js   # Auth controller (Demo)
     │       ├── main.js   # Homepage controller
-    │       └── service.js# Imageboard thread/reply controller
+    │       └── service.js# Imageboard thread/reply orchestrator
     └── views/            # Go HTML templates
 ```
 

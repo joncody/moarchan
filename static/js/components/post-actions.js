@@ -11,6 +11,28 @@ export default function createPostActions(global, options) {
         return Array.isArray(dataVal) ? dataVal[0] : dataVal;
     }
 
+    function toggleImageExpansion(e) {
+        if (e && typeof e.preventDefault === "function") {
+            e.preventDefault();
+        }
+        const container = dom(e.currentTarget);
+        const img = container.select(".post-image").get(0);
+        if (!img) {
+            return;
+        }
+
+        const fullSrc = img.getAttribute("data-full") || container.attr("href")[0];
+        const thumbSrc = img.getAttribute("data-thumb") || img.src;
+
+        if (img.classList.contains("expanded")) {
+            img.classList.remove("expanded");
+            img.src = thumbSrc;
+        } else {
+            img.classList.add("expanded");
+            img.src = fullSrc;
+        }
+    }
+
     function toggleThread(e) {
         if (e && typeof e.preventDefault === "function") {
             e.preventDefault();
@@ -144,6 +166,7 @@ export default function createPostActions(global, options) {
         threadEl.selectAll(".unhide-post").on("click", unhidePost, false);
         threadEl.selectAll(".post-options-arrow").on("click", showPostOptions, false);
         threadEl.selectAll(".post-reply-to").on("click", handleReplyClick, false);
+        threadEl.selectAll(".post-image-container").on("click", toggleImageExpansion, false);
     }
 
     function bindReplyEvents(replyEl) {
@@ -151,6 +174,7 @@ export default function createPostActions(global, options) {
         replyEl.selectAll(".unhide-post").on("click", unhidePost, false);
         replyEl.selectAll(".post-options-arrow").on("click", showPostOptions, false);
         replyEl.selectAll(".post-reply-to").on("click", handleReplyClick, false);
+        replyEl.selectAll(".post-image-container").on("click", toggleImageExpansion, false);
     }
 
     function deleteSelectedPosts(e) {

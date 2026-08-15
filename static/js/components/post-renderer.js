@@ -15,16 +15,10 @@ function renderImageBlock(data) {
         return "";
     }
     const safeFile = escapeHtml(data.file_name);
-    const size = escapeHtml(String(data.file_size || "0"));
-    const dims = escapeHtml(String(data.file_dimensions || "???x???"));
 
     return [
-        "<div class=\"post-image-metadata\">",
-        "File: <a class=\"post-image-link blue-text-link\" href=\"/static/images/uploads/", safeFile, "\" alt=\"", safeFile, "\" title=\"", safeFile, "\" target=\"_blank\">", safeFile, "</a>",
-        "<span class=\"post-image-dimensions\">(", size, " KB, ", dims, ")</span>",
-        "</div>",
         "<a class=\"post-image-container\" href=\"/static/images/uploads/", safeFile, "\" target=\"_blank\">",
-        "<img class=\"post-image\" src=\"/static/images/uploads/thumb_", safeFile, "\" title=\"", safeFile, "\" alt=\"", safeFile, "\" />",
+        "<img class=\"post-image\" src=\"/static/images/uploads/thumb_", safeFile, "\" data-full=\"/static/images/uploads/", safeFile, "\" data-thumb=\"/static/images/uploads/thumb_", safeFile, "\" title=\"", safeFile, "\" alt=\"", safeFile, "\" />",
         "</a>"
     ].join("");
 }
@@ -37,13 +31,13 @@ function renderThread(data) {
     const safeTime = escapeHtml(data.timestamp || "");
     const comment = data.comment || ""; // Pre-sanitized by server
 
-    let fileMetadata = "";
+    let fileHeaderBlock = "";
     let fileImage = "";
     if (data.file_name) {
         const safeFile = escapeHtml(data.file_name);
         const size = escapeHtml(String(data.file_size || "0"));
         const dims = escapeHtml(String(data.file_dimensions || "???x???"));
-        fileMetadata = [
+        fileHeaderBlock = [
             "<div class=\"post-image-metadata op\">",
             "File: <a class=\"post-image-link blue-text-link op\" href=\"/static/images/uploads/", safeFile, "\" target=\"_blank\">", safeFile, "</a>",
             "<span class=\"post-image-dimensions op\">(", size, " KB, ", dims, ")</span>",
@@ -51,19 +45,23 @@ function renderThread(data) {
         ].join("");
         fileImage = [
             "<a class=\"post-image-container op\" href=\"/static/images/uploads/", safeFile, "\" target=\"_blank\">",
-            "<img class=\"post-image op\" src=\"/static/images/uploads/thumb_", safeFile, "\" alt=\"", safeFile, "\" />",
+            "<img class=\"post-image op\" src=\"/static/images/uploads/thumb_", safeFile, "\" data-full=\"/static/images/uploads/", safeFile, "\" data-thumb=\"/static/images/uploads/thumb_", safeFile, "\" alt=\"", safeFile, "\" />",
             "</a>"
         ].join("");
     }
 
     return [
         "<div id=\"post-", safeHash, "\" class=\"thread\">",
+        "<div class=\"post-file-header op\">",
         "<div class=\"post-show-hide-icons op\">",
         "<img class=\"post-show-hide-thread plus\" data-post=\"", safeHash, "\" src=\"/static/images/show-hide-thread-plus-red.png\" alt=\"+\" />",
         "<img class=\"post-show-hide-thread minus\" data-post=\"", safeHash, "\" src=\"/static/images/show-hide-thread-minus-red.png\" alt=\"-\" />",
         "</div>",
-        fileMetadata,
+        fileHeaderBlock,
+        "</div>",
+        "<div class=\"post-body op\">",
         fileImage,
+        "<div class=\"post-details op\">",
         "<div class=\"post-header op\">",
         "<input class=\"post-checkbox op\" type=\"checkbox\" />",
         "<span class=\"post-subject op\">", safeSubject, "</span>",
@@ -84,8 +82,10 @@ function renderThread(data) {
         "</ul>",
         "</div>",
         "</div>",
-        "<div class=\"thread-container\">",
         "<p class=\"post-content op\">", comment, "</p>",
+        "</div>",
+        "</div>",
+        "<div class=\"thread-container\">",
         "<div class=\"post-summary-container\">",
         "<div class=\"post-show-hide-icons replies\">",
         "<img class=\"post-show-hide-replies plus\" data-post=\"", safeHash, "\" src=\"/static/images/show-hide-thread-plus-red.png\" alt=\"+\" />",
@@ -108,6 +108,19 @@ function renderReply(data) {
         ? "<li class=\"image-search\" data-post=\"" + safeHash + "\">Image Search &gt;&gt;</li>"
         : "";
 
+    let fileMetadataBlock = "";
+    if (data.file_name) {
+        const safeFile = escapeHtml(data.file_name);
+        const size = escapeHtml(String(data.file_size || "0"));
+        const dims = escapeHtml(String(data.file_dimensions || "???x???"));
+        fileMetadataBlock = [
+            "<div class=\"post-image-metadata\">",
+            "File: <a class=\"post-image-link blue-text-link\" href=\"/static/images/uploads/", safeFile, "\" alt=\"", safeFile, "\" title=\"", safeFile, "\" target=\"_blank\">", safeFile, "</a>",
+            "<span class=\"post-image-dimensions\">(", size, " KB, ", dims, ")</span>",
+            "</div>"
+        ].join("");
+    }
+
     return [
         "<div class=\"reply-container\">",
         "<div class=\"reply-wrapper\">",
@@ -129,8 +142,11 @@ function renderReply(data) {
         "</ul>",
         "</div>",
         "</div>",
+        fileMetadataBlock,
+        "<div class=\"reply-body\">",
         renderImageBlock(data),
         "<p class=\"post-content\">", (data.comment || ""), "</p>",
+        "</div>",
         "</div>",
         "</div>",
         "</div>"
