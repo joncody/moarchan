@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"moarchan/frame"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func InitMoarchanSchema(ctx context.Context, app *frame.App) error {
@@ -24,14 +25,23 @@ func InitMoarchanSchema(ctx context.Context, app *frame.App) error {
 			name TEXT NOT NULL,
 			subject TEXT,
 			options TEXT,
+			password_hash TEXT,
 			comment TEXT NOT NULL,
 			file_name TEXT NOT NULL,
 			file_mime TEXT NOT NULL,
 			file_size TEXT NOT NULL,
 			file_dimensions TEXT NOT NULL,
 			timestamp TEXT NOT NULL,
+			bumped_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 			created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 		);
+
+		-- Safe non-destructive migrations for existing tables
+		ALTER TABLE threads ADD COLUMN IF NOT EXISTS password_hash TEXT;
+		ALTER TABLE threads ADD COLUMN IF NOT EXISTS bumped_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+
+		-- Backfill bumped_at from created_at for any legacy threads
+		UPDATE threads SET bumped_at = created_at WHERE bumped_at IS NULL;
 
 		CREATE TABLE IF NOT EXISTS posts (
 			id BIGSERIAL PRIMARY KEY,
@@ -40,6 +50,7 @@ func InitMoarchanSchema(ctx context.Context, app *frame.App) error {
 			topic TEXT NOT NULL,
 			name TEXT NOT NULL,
 			options TEXT,
+			password_hash TEXT,
 			comment TEXT NOT NULL,
 			file_name TEXT,
 			file_mime TEXT,
@@ -51,7 +62,11 @@ func InitMoarchanSchema(ctx context.Context, app *frame.App) error {
 			created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 		);
 
-		CREATE INDEX IF NOT EXISTS idx_threads_topic ON threads(topic);
+		-- Safe non-destructive migration for posts table
+		ALTER TABLE posts ADD COLUMN IF NOT EXISTS password_hash TEXT;
+
+		-- Indexes
+		CREATE INDEX IF NOT EXISTS idx_threads_topic_bumped ON threads(topic, bumped_at DESC);
 		CREATE INDEX IF NOT EXISTS idx_posts_thread_hash ON posts(thread_hash);
 	`
 	if _, err := app.Driver.ExecContext(ctx, query); err != nil {
@@ -88,8 +103,7 @@ func GetTopicThreads(ctx context.Context, db *sql.DB, topic string) ([]map[strin
 			t.hash, t.topic, t.name, t.subject, t.options, t.comment,
 			t.file_name, t.file_mime, t.file_size, t.file_dimensions, t.timestamp,
 			COALESCE(
-				jsonb_object_agg(
-					p.hash,
+				jsonb_agg(
 					jsonb_build_object(
 						'hash', p.hash,
 						'thread', p.thread_hash,
@@ -104,15 +118,15 @@ func GetTopicThreads(ctx context.Context, db *sql.DB, topic string) ([]map[strin
 						'timestamp', p.timestamp,
 						'tagging', p.tagging,
 						'taggedBy', p.tagged_by
-					)
+					) ORDER BY p.id ASC
 				) FILTER (WHERE p.hash IS NOT NULL),
-				'{}'::jsonb
+				'[]'::jsonb
 			) as replies
 		FROM threads t
 		LEFT JOIN posts p ON t.hash = p.thread_hash
 		WHERE t.topic = $1
 		GROUP BY t.id, t.hash
-		ORDER BY t.id DESC
+		ORDER BY t.bumped_at DESC
 		LIMIT 100
 	`
 	rows, err := db.QueryContext(ctx, query, topic)
@@ -134,9 +148,9 @@ func GetTopicThreads(ctx context.Context, db *sql.DB, topic string) ([]map[strin
 			return nil, fmt.Errorf("scan thread row: %w", err)
 		}
 
-		var replies map[string]interface{}
+		var replies []map[string]interface{}
 		if err := json.Unmarshal(repliesRaw, &replies); err != nil {
-			replies = make(map[string]interface{})
+			replies = make([]map[string]interface{}, 0)
 		}
 
 		entry := map[string]interface{}{
@@ -166,8 +180,7 @@ func GetSingleThread(ctx context.Context, db *sql.DB, topic, threadHash string) 
 			t.hash, t.topic, t.name, t.subject, t.options, t.comment,
 			t.file_name, t.file_mime, t.file_size, t.file_dimensions, t.timestamp,
 			COALESCE(
-				jsonb_object_agg(
-					p.hash,
+				jsonb_agg(
 					jsonb_build_object(
 						'hash', p.hash,
 						'thread', p.thread_hash,
@@ -182,9 +195,9 @@ func GetSingleThread(ctx context.Context, db *sql.DB, topic, threadHash string) 
 						'timestamp', p.timestamp,
 						'tagging', p.tagging,
 						'taggedBy', p.tagged_by
-					)
+					) ORDER BY p.id ASC
 				) FILTER (WHERE p.hash IS NOT NULL),
-				'{}'::jsonb
+				'[]'::jsonb
 			) as replies
 		FROM threads t
 		LEFT JOIN posts p ON t.hash = p.thread_hash
@@ -205,9 +218,9 @@ func GetSingleThread(ctx context.Context, db *sql.DB, topic, threadHash string) 
 		return nil, fmt.Errorf("query single thread: %w", err)
 	}
 
-	var replies map[string]interface{}
+	var replies []map[string]interface{}
 	if err := json.Unmarshal(repliesRaw, &replies); err != nil {
-		replies = make(map[string]interface{})
+		replies = make([]map[string]interface{}, 0)
 	}
 
 	return map[string]interface{}{
@@ -229,29 +242,33 @@ func GetSingleThread(ctx context.Context, db *sql.DB, topic, threadHash string) 
 }
 
 type DeletedPostInfo struct {
-	Hash     string
-	Topic    string
-	IsThread bool
-	FileName string
+	Hash      string
+	Topic     string
+	IsThread  bool
+	FileNames []string
 }
 
-func DeletePostOrFile(ctx context.Context, db *sql.DB, hash string, fileOnly bool) (*DeletedPostInfo, error) {
+func DeletePostOrFile(ctx context.Context, db *sql.DB, hash, password string, isAdmin, fileOnly bool) (*DeletedPostInfo, error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("begin delete tx: %w", err)
 	}
 	defer tx.Rollback()
 
-	var topic, fileName string
+	var topic, dbPassHash, opFileName string
 	var isThread bool
+	var fileNames []string
 
 	// 1. Check if the target is a thread OP
-	err = tx.QueryRowContext(ctx, `SELECT topic, COALESCE(file_name, '') FROM threads WHERE hash = $1 FOR UPDATE`, hash).Scan(&topic, &fileName)
+	err = tx.QueryRowContext(ctx, `SELECT topic, COALESCE(password_hash, ''), COALESCE(file_name, '') FROM threads WHERE hash = $1 FOR UPDATE`, hash).
+		Scan(&topic, &dbPassHash, &opFileName)
+
 	if err == nil {
 		isThread = true
 	} else if errors.Is(err, sql.ErrNoRows) {
 		// 2. Check if the target is a post reply
-		err = tx.QueryRowContext(ctx, `SELECT topic, COALESCE(file_name, '') FROM posts WHERE hash = $1 FOR UPDATE`, hash).Scan(&topic, &fileName)
+		err = tx.QueryRowContext(ctx, `SELECT topic, COALESCE(password_hash, ''), COALESCE(file_name, '') FROM posts WHERE hash = $1 FOR UPDATE`, hash).
+			Scan(&topic, &dbPassHash, &opFileName)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return nil, fmt.Errorf("post or thread %q not found", hash)
@@ -260,6 +277,20 @@ func DeletePostOrFile(ctx context.Context, db *sql.DB, hash string, fileOnly boo
 		}
 	} else {
 		return nil, fmt.Errorf("query thread: %w", err)
+	}
+
+	// 3. Verify deletion authorization
+	if !isAdmin {
+		if dbPassHash == "" {
+			return nil, errors.New("post cannot be deleted without admin privileges")
+		}
+		if err := bcrypt.CompareHashAndPassword([]byte(dbPassHash), []byte(password)); err != nil {
+			return nil, errors.New("invalid post deletion password")
+		}
+	}
+
+	if opFileName != "" {
+		fileNames = append(fileNames, opFileName)
 	}
 
 	if fileOnly {
@@ -273,6 +304,17 @@ func DeletePostOrFile(ctx context.Context, db *sql.DB, hash string, fileOnly boo
 		}
 	} else {
 		if isThread {
+			// Collect reply filenames before cascade delete
+			rows, err := tx.QueryContext(ctx, `SELECT file_name FROM posts WHERE thread_hash = $1 AND file_name != ''`, hash)
+			if err == nil {
+				for rows.Next() {
+					var rfn string
+					if err := rows.Scan(&rfn); err == nil && rfn != "" {
+						fileNames = append(fileNames, rfn)
+					}
+				}
+				rows.Close()
+			}
 			_, err = tx.ExecContext(ctx, `DELETE FROM threads WHERE hash = $1`, hash)
 		} else {
 			_, err = tx.ExecContext(ctx, `DELETE FROM posts WHERE hash = $1`, hash)
@@ -287,9 +329,9 @@ func DeletePostOrFile(ctx context.Context, db *sql.DB, hash string, fileOnly boo
 	}
 
 	return &DeletedPostInfo{
-		Hash:     hash,
-		Topic:    topic,
-		IsThread: isThread,
-		FileName: fileName,
+		Hash:      hash,
+		Topic:     topic,
+		IsThread:  isThread,
+		FileNames: fileNames,
 	}, nil
 }

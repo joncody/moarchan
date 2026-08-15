@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -21,27 +20,33 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 	"moarchan/frame"
 )
 
 var app *frame.App
 var tagRegex = regexp.MustCompile(`&gt;&gt;([A-Za-z0-9]+)`)
 
+const (
+	MaxImageDimension = 10000
+	MaxUploadSize     = 32 << 20 // 32MB form limit
+)
+
 type Thread struct {
-	Hash           string           `json:"hash"`
-	Topic          string           `json:"topic"`
-	Name           string           `json:"name"`
-	Subject        string           `json:"subject"`
-	Options        string           `json:"options"`
-	Comment        string           `json:"comment"`
-	FileName       string           `json:"file_name"`
-	FileMime       string           `json:"file_mime"`
-	FileSize       string           `json:"file_size"`
-	FileDimensions string           `json:"file_dimensions"`
-	Timestamp      string           `json:"timestamp"`
-	Replies        map[string]Reply `json:"replies"`
-	TaggedBy       []string         `json:"taggedBy"`
-	Tagging        []string         `json:"tagging"`
+	Hash           string   `json:"hash"`
+	Topic          string   `json:"topic"`
+	Name           string   `json:"name"`
+	Subject        string   `json:"subject"`
+	Options        string   `json:"options"`
+	Comment        string   `json:"comment"`
+	FileName       string   `json:"file_name"`
+	FileMime       string   `json:"file_mime"`
+	FileSize       string   `json:"file_size"`
+	FileDimensions string   `json:"file_dimensions"`
+	Timestamp      string   `json:"timestamp"`
+	Replies        []Reply  `json:"replies"`
+	TaggedBy       []string `json:"taggedBy"`
+	Tagging        []string `json:"tagging"`
 }
 
 type Reply struct {
@@ -161,6 +166,10 @@ func processMultipartUpload(fileHeader *multipart.FileHeader, uniqueID string) (
 		return nil, fmt.Errorf("invalid or corrupted image binary: %w", err)
 	}
 
+	if config.Width > MaxImageDimension || config.Height > MaxImageDimension {
+		return nil, fmt.Errorf("image dimensions (%dx%d) exceed maximum %dpx", config.Width, config.Height, MaxImageDimension)
+	}
+
 	if _, err := file.Seek(0, 0); err != nil {
 		return nil, fmt.Errorf("reset file pointer: %w", err)
 	}
@@ -189,7 +198,7 @@ func processMultipartUpload(fileHeader *multipart.FileHeader, uniqueID string) (
 	}
 	defer thumbOut.Close()
 
-	// Re-encode image binary to strip all EXIF/GPS metadata and generate a scaled thumbnail
+	// Re-encode image binary to strip metadata and generate scaled thumbnail
 	switch format {
 	case "jpeg":
 		img, err := jpeg.Decode(file)
@@ -264,8 +273,16 @@ func generateUnique() (string, string) {
 	return timestamp, hash
 }
 
+func hashPostPassword(pwd string) (string, error) {
+	if pwd == "" {
+		return "", nil
+	}
+	h, err := bcrypt.GenerateFromPassword([]byte(pwd), bcrypt.DefaultCost)
+	return string(h), err
+}
+
 func handleCreateThread(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
+	if err := r.ParseMultipartForm(MaxUploadSize); err != nil {
 		http.Error(w, "Multipart form parse error or size limit exceeded", http.StatusBadRequest)
 		return
 	}
@@ -275,6 +292,7 @@ func handleCreateThread(w http.ResponseWriter, r *http.Request) {
 	rawSub := strings.TrimSpace(r.FormValue("subject"))
 	rawOpt := strings.TrimSpace(r.FormValue("options"))
 	rawCom := strings.TrimSpace(r.FormValue("comment"))
+	rawPass := strings.TrimSpace(r.FormValue("password"))
 
 	if topic == "" {
 		http.Error(w, "Missing topic", http.StatusBadRequest)
@@ -301,16 +319,17 @@ func handleCreateThread(w http.ResponseWriter, r *http.Request) {
 		name = "Anonymous"
 	}
 	subject := html.EscapeString(rawSub)
+	passHash, _ := hashPostPassword(rawPass)
 
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
 	const insertQuery = `
-		INSERT INTO threads (hash, topic, name, subject, options, comment, file_name, file_mime, file_size, file_dimensions, timestamp)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		INSERT INTO threads (hash, topic, name, subject, options, password_hash, comment, file_name, file_mime, file_size, file_dimensions, timestamp)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 	`
 	_, err = app.Driver.ExecContext(ctx, insertQuery,
-		hash, topic, name, subject, rawOpt, comment,
+		hash, topic, name, subject, rawOpt, passHash, comment,
 		fileDetails.Name, fileDetails.Mime, fileDetails.Size, fileDetails.Dimensions, timestamp,
 	)
 	if err != nil {
@@ -319,7 +338,7 @@ func handleCreateThread(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	threadMap := map[string]interface{}{
+	threadPayload := map[string]interface{}{
 		"hash":            hash,
 		"topic":           topic,
 		"name":            name,
@@ -331,21 +350,12 @@ func handleCreateThread(w http.ResponseWriter, r *http.Request) {
 		"file_size":       fileDetails.Size,
 		"file_dimensions": fileDetails.Dimensions,
 		"timestamp":       timestamp,
-		"replies":         map[string]interface{}{},
+		"replies":         []interface{}{},
 		"taggedBy":        []string{},
 		"tagging":         []string{},
 	}
 
-	var buf bytes.Buffer
-	if err := app.Templates.ExecuteTemplate(&buf, "thread-item", threadMap); err != nil {
-		log.Println("Render thread fragment error:", err)
-	}
-
-	ssePayload, err := json.Marshal(map[string]interface{}{
-		"hash":  hash,
-		"topic": topic,
-		"html":  buf.String(),
-	})
+	ssePayload, err := json.Marshal(threadPayload)
 	if err != nil {
 		http.Error(w, "Serialization error", http.StatusInternalServerError)
 		return
@@ -353,31 +363,13 @@ func handleCreateThread(w http.ResponseWriter, r *http.Request) {
 
 	app.Hub.Broadcast(topic, "new-thread", ssePayload)
 
-	threadObj := Thread{
-		Hash:           hash,
-		Topic:          topic,
-		Name:           name,
-		Subject:        subject,
-		Options:        rawOpt,
-		Comment:        comment,
-		FileName:       fileDetails.Name,
-		FileMime:       fileDetails.Mime,
-		FileSize:       fileDetails.Size,
-		FileDimensions: fileDetails.Dimensions,
-		Timestamp:      timestamp,
-		Replies:        make(map[string]Reply),
-		TaggedBy:       []string{},
-		Tagging:        []string{},
-	}
-	payload, _ := json.Marshal(&threadObj)
-
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	w.Write(payload)
+	w.Write(ssePayload)
 }
 
 func handleCreateReply(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseMultipartForm(8 << 20); err != nil {
+	if err := r.ParseMultipartForm(MaxUploadSize); err != nil {
 		http.Error(w, "Multipart form parse error or size limit exceeded", http.StatusBadRequest)
 		return
 	}
@@ -387,6 +379,7 @@ func handleCreateReply(w http.ResponseWriter, r *http.Request) {
 	rawName := strings.TrimSpace(r.FormValue("name"))
 	rawOpt := strings.TrimSpace(r.FormValue("options"))
 	rawCom := strings.TrimSpace(r.FormValue("comment"))
+	rawPass := strings.TrimSpace(r.FormValue("password"))
 
 	if topic == "" || threadHash == "" {
 		http.Error(w, "Missing thread or topic parameter", http.StatusBadRequest)
@@ -417,6 +410,7 @@ func handleCreateReply(w http.ResponseWriter, r *http.Request) {
 	if name == "" {
 		name = "Anonymous"
 	}
+	passHash, _ := hashPostPassword(rawPass)
 
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
@@ -438,11 +432,11 @@ func handleCreateReply(w http.ResponseWriter, r *http.Request) {
 	taggedByJSON, _ := json.Marshal([]string{})
 
 	const insertPostQuery = `
-		INSERT INTO posts (hash, thread_hash, topic, name, options, comment, file_name, file_mime, file_size, file_dimensions, timestamp, tagging, tagged_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		INSERT INTO posts (hash, thread_hash, topic, name, options, password_hash, comment, file_name, file_mime, file_size, file_dimensions, timestamp, tagging, tagged_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 	`
 	_, err = tx.ExecContext(ctx, insertPostQuery,
-		hash, threadHash, topic, name, rawOpt, comment,
+		hash, threadHash, topic, name, rawOpt, passHash, comment,
 		fileDetails.Name, fileDetails.Mime, fileDetails.Size, fileDetails.Dimensions, timestamp,
 		taggingJSON, taggedByJSON,
 	)
@@ -452,12 +446,17 @@ func handleCreateReply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Bump thread unless "sage" is in options
+	if !strings.Contains(strings.ToLower(rawOpt), "sage") {
+		_, _ = tx.ExecContext(ctx, `UPDATE threads SET bumped_at = CURRENT_TIMESTAMP WHERE hash = $1`, threadHash)
+	}
+
 	if err := tx.Commit(); err != nil {
 		http.Error(w, "Commit transaction error", http.StatusInternalServerError)
 		return
 	}
 
-	replyMap := map[string]interface{}{
+	replyPayload := map[string]interface{}{
 		"hash":            hash,
 		"thread":          threadHash,
 		"topic":           topic,
@@ -473,18 +472,7 @@ func handleCreateReply(w http.ResponseWriter, r *http.Request) {
 		"tagging":         tags,
 	}
 
-	var buf bytes.Buffer
-	if err := app.Templates.ExecuteTemplate(&buf, "reply-item", replyMap); err != nil {
-		log.Println("Render reply fragment error:", err)
-	}
-
-	ssePayload, err := json.Marshal(map[string]interface{}{
-		"hash":    hash,
-		"thread":  threadHash,
-		"topic":   topic,
-		"tagging": tags,
-		"html":    buf.String(),
-	})
+	ssePayload, err := json.Marshal(replyPayload)
 	if err != nil {
 		http.Error(w, "Serialization error", http.StatusInternalServerError)
 		return
@@ -492,30 +480,14 @@ func handleCreateReply(w http.ResponseWriter, r *http.Request) {
 
 	app.Hub.Broadcast(topic, "new-reply", ssePayload)
 
-	replyObj := Reply{
-		Hash:           hash,
-		Thread:         threadHash,
-		Topic:          topic,
-		Name:           name,
-		Options:        rawOpt,
-		Comment:        comment,
-		FileName:       fileDetails.Name,
-		FileMime:       fileDetails.Mime,
-		FileSize:       fileDetails.Size,
-		FileDimensions: fileDetails.Dimensions,
-		Timestamp:      timestamp,
-		TaggedBy:       []string{},
-		Tagging:        tags,
-	}
-	payload, _ := json.Marshal(&replyObj)
-
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	w.Write(payload)
+	w.Write(ssePayload)
 }
 
 func handleDeletePost(w http.ResponseWriter, r *http.Request) {
 	hash := strings.TrimSpace(r.FormValue("hash"))
+	password := strings.TrimSpace(r.FormValue("password"))
 	fileOnly := r.FormValue("file_only") == "true" || r.FormValue("file_only") == "on"
 
 	if hash == "" {
@@ -523,20 +495,25 @@ func handleDeletePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	sessionVals, _ := app.GetSessionValues(r)
+	isAdmin := sessionVals["privilege"] == "admin"
+
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	info, err := DeletePostOrFile(ctx, app.Driver, hash, fileOnly)
+	info, err := DeletePostOrFile(ctx, app.Driver, hash, password, isAdmin, fileOnly)
 	if err != nil {
 		log.Println("Delete post error:", err)
-		http.Error(w, fmt.Sprintf("Failed to delete: %v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Failed to delete: %v", err), http.StatusForbidden)
 		return
 	}
 
 	// Remove corresponding image files from disk
-	if info.FileName != "" {
-		_ = os.Remove(fmt.Sprintf("./static/images/uploads/%s", info.FileName))
-		_ = os.Remove(fmt.Sprintf("./static/images/uploads/thumb_%s", info.FileName))
+	for _, fn := range info.FileNames {
+		if fn != "" {
+			_ = os.Remove(fmt.Sprintf("./static/images/uploads/%s", fn))
+			_ = os.Remove(fmt.Sprintf("./static/images/uploads/thumb_%s", fn))
+		}
 	}
 
 	eventPayload, _ := json.Marshal(map[string]interface{}{
@@ -562,7 +539,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// 1. Programmatic Route Declarations (Fluent Go API)
+	// 1. Programmatic Route Declarations
 	app.Route("/auth").Template("auth").Controller("auth")
 	app.Route("/news").Template("news")
 	app.Route("/blog").Template("blog")
