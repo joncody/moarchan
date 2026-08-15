@@ -1,32 +1,42 @@
+/*
+================================================================================
+  MODERN PRODUCTION CSS RESET
+  A robust, forward-compatible baseline for modern layouts (Grid & Flexbox).
+================================================================================
+*/
+
+/* 1. Box sizing & margin/padding normalization */
 *,
 *::before,
 *::after {
     box-sizing: border-box;
-}
-* {
     margin: 0;
     padding: 0;
     border: 0;
 }
+
+/* 2. Document root */
 html {
-    font-size: 62.5%;
-    font-family: sans-serif;
-    line-height: 1.15;
     -webkit-text-size-adjust: 100%;
-    -ms-text-size-adjust: 100%;
+    -moz-text-size-adjust: 100%;
+    text-size-adjust: 100%;
     -webkit-tap-highlight-color: transparent;
-    height: 100%;
+    tab-size: 4;
+    min-height: 100%;
     scroll-behavior: smooth;
+    font-size: 100%;
 }
+
+/* 3. Body element */
 body {
-    font-size: 1.6rem;
+    min-height: 100vh;
+    min-height: 100dvh;
     line-height: 1.5;
-    height: 100%;
-    color: #000;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    overflow-y: auto;
 }
+
+/* 4. HTML5 structural & interactive elements */
 article,
 aside,
 details,
@@ -42,57 +52,40 @@ section,
 search {
     display: block;
 }
+
 summary {
-    display: list-item;
     cursor: pointer;
 }
-template,
-[hidden] {
-    display: none;
+
+dialog {
+    margin: auto;
 }
+
+/* 5. Typography & Headings */
 h1,
 h2,
 h3,
 h4,
 h5,
 h6 {
-    font-weight: normal;
     font-size: inherit;
+    font-weight: inherit;
+    overflow-wrap: break-word;
 }
-pre,
-code,
-kbd,
-samp {
-    font-family: monospace, monospace;
-    font-size: 1em;
+
+p {
+    overflow-wrap: break-word;
 }
-a {
-    background-color: transparent;
-    color: inherit;
-    text-decoration: none;
-    cursor: pointer;
-}
-ul,
-ol {
-    list-style: none;
-}
-blockquote,
-q {
-    quotes: none;
-}
-blockquote::before,
-blockquote::after,
-q::before,
-q::after {
-    content: none;
-}
+
 b,
 strong {
     font-weight: bolder;
 }
+
 small {
     font-size: 80%;
 }
+
 sub,
 sup {
     font-size: 75%;
@@ -100,24 +93,39 @@ sup {
     position: relative;
     vertical-align: baseline;
 }
+
 sub {
     bottom: -0.25em;
 }
+
 sup {
     top: -0.5em;
 }
-hr {
-    box-sizing: content-box;
-    height: 0;
-    overflow: visible;
-    border-bottom: 1px solid #ccc;
+
+pre,
+code,
+kbd,
+samp {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 1em;
 }
-abbr[title] {
-    border-bottom: none;
-    text-decoration: underline;
-    text-decoration: underline dotted;
-    cursor: help;
+
+/* 6. Lists */
+ul,
+ol,
+menu {
+    list-style: none;
 }
+
+/* 7. Links */
+a {
+    color: inherit;
+    text-decoration: none;
+    background-color: transparent;
+    cursor: pointer;
+}
+
+/* 8. Media elements */
 img,
 picture,
 video,
@@ -126,15 +134,22 @@ svg {
     display: block;
     max-width: 100%;
     height: auto;
-    width: auto;
 }
+
 audio {
     display: inline-block;
 }
+
 audio:not([controls]) {
     display: none;
     height: 0;
 }
+
+:where(svg) {
+    fill: currentColor;
+}
+
+/* 9. Form controls & Interactive elements */
 button,
 input,
 optgroup,
@@ -142,26 +157,32 @@ select,
 textarea {
     font-family: inherit;
     font-size: 100%;
-    line-height: 1.15;
+    line-height: inherit;
     color: inherit;
+    letter-spacing: inherit;
     background: none;
-    vertical-align: middle;
+    border-radius: 0;
 }
+
 button,
 input {
     overflow: visible;
 }
+
 button,
 select {
     text-transform: none;
 }
+
 button,
 [type="button"],
 [type="reset"],
 [type="submit"] {
     -webkit-appearance: button;
+    appearance: button;
     cursor: pointer;
 }
+
 button::-moz-focus-inner,
 [type="button"]::-moz-focus-inner,
 [type="reset"]::-moz-focus-inner,
@@ -169,51 +190,79 @@ button::-moz-focus-inner,
     border-style: none;
     padding: 0;
 }
-button:-moz-focusring,
-[type="button"]:-moz-focusring,
-[type="reset"]:-moz-focusring,
-[type="submit"]:-moz-focusring {
-    outline: 1px dotted ButtonText;
-}
-fieldset {
-    min-width: 0;
-}
-legend {
-    box-sizing: border-box;
-    color: inherit;
-    display: table;
-    max-width: 100%;
-    white-space: normal;
-}
-progress {
-    vertical-align: baseline;
-}
+
 textarea {
     overflow: auto;
     resize: vertical;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
 }
-[type="number"]::-webkit-inner-spin-button,
-[type="number"]::-webkit-outer-spin-button {
-    height: auto;
-}
+
 [type="search"] {
     -webkit-appearance: textfield;
+    appearance: textfield;
     outline-offset: -2px;
 }
+
 [type="search"]::-webkit-search-decoration {
     -webkit-appearance: none;
 }
+
 ::-webkit-file-upload-button {
     -webkit-appearance: button;
     font: inherit;
 }
+
+fieldset {
+    min-width: 0;
+}
+
+legend {
+    display: table;
+    max-width: 100%;
+    white-space: normal;
+    color: inherit;
+}
+
+/* 10. Tables */
+table {
+    border-collapse: collapse;
+    border-spacing: 0;
+    text-indent: 0;
+}
+
+/* 11. Hidden & Template elements */
+template,
+[hidden] {
+    display: none !important;
+}
+
+/* 12. Focus accessibility */
 :focus {
     outline: 2px solid -webkit-focus-ring-color;
 }
+
 :focus:not(:focus-visible) {
     outline: 0;
 }
+
 :focus-visible {
     outline: 2px solid -webkit-focus-ring-color;
     outline-offset: 2px;
+}
+
+/* 13. Reduced motion accessibility query */
+@media (prefers-reduced-motion: reduce) {
+    html:focus-within {
+        scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
 }

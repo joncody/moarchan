@@ -1,0 +1,28 @@
+/*
+==============================
+TOPICS NAV
+==============================
+*/
+.topics-nav {
+    position: relative;
+    display: block;
+    padding: 4px;
+    clear: both;
+}
+.topics-nav li {
+    display: inline-block;
+    font-size: 12px;
+    padding: 4px 4px 0 0;
+}
+.topics-nav li span {
+    cursor: pointer;
+}
+.topics-nav li span:hover {
+    color: #E00;
+}
+.settings-link {
+    float: right;
+}
+.home-link {
+    float: right;
+}

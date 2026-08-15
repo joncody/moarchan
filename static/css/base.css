@@ -1,0 +1,14 @@
+body {
+    color: #800000;
+    font-family: arial, helvetica, sans-serif;
+    background: #ffd09b;
+    background: -webkit-gradient(linear, left top, left bottom, color-stop(0%,#ffd09b), color-stop(20%,#ffffff));
+    background: -webkit-linear-gradient(top,  #ffd09b 0%,#ffffff 20%);
+    background: linear-gradient(to bottom,  #ffd09b 0%,#ffffff 20%);
+    background-repeat: no-repeat;
+}
+.page {
+    display: block;
+    margin: 0 auto;
+    width: 96%;
+}

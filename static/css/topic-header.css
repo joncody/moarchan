@@ -1,0 +1,161 @@
+/*
+==============================
+TOPIC HEADER
+==============================
+*/
+.topic-image {
+    display: block;
+    margin: 9px auto 0;
+    width: 300px;
+    border: 1px solid #111;
+}
+.topic-header {
+    display: block;
+    margin: 0 auto;
+    text-align: center;
+    font-size: 28px;
+    font-weight: bold;
+    color: #AF0A0F;
+    padding: 9px 0;
+}
+.top-line {
+    display: block;
+    margin: 0 auto;
+    background: #808080;
+    height: 1px;
+}
+.top-line.one {
+    width: 90%;
+}
+.top-line.two {
+    width: 80%;
+}
+.support-moarchan {
+    display: block;
+    color: #111;
+    text-align: center;
+    font-size: 12px;
+    padding: 9px 0;
+}
+.new-post-container {
+    display: block;
+    margin: 9px auto;
+    text-align: center;
+}
+.new-post {
+    display: inline-block;
+    font-size: 22px;
+    font-weight: bold;
+    text-align: center;
+}
+.new-post-form {
+    display: inline-block;
+    margin: 0 auto;
+    min-width: 468px;
+    text-align: left;
+}
+.new-post-field-row {
+    display: block;
+    margin: 1px 0;
+}
+.new-post-label {
+    background: #EA8;
+    border: 1px solid #800;
+    display: inline-block;
+    font-size: 13px;
+    font-weight: bold;
+    padding: 5px;
+    width: 80px;
+}
+.new-post-input {
+    background: #FFF;
+    border: 1px solid #CCC;
+    color: #444;
+    font-size: 13px;
+    padding: 5px;
+    width: 244px;
+    vertical-align: middle;
+    outline: 0;
+}
+.new-post-file-input {
+    font-size: 13px;
+}
+.new-post-input:focus {
+    border: 1px solid #EA8;
+}
+.new-post-bullets {
+    list-style-type: disc;
+    list-style-position: inside;
+    font-size: 11px;
+    line-height: 1.2;
+    margin: 6px 0 0 6px;
+}
+.grey-button {
+    color: #111;
+    cursor: pointer;
+    display: inline-block;
+    font-size: 13px;
+    background: linear-gradient(#FFF, #DDD);
+    border-radius: 3px;
+    border: 1px solid #AAA;
+    padding: 5px 9px;
+    vertical-align: middle;
+}
+.grey-button:active {
+    background: #CCC;
+}
+.blotter-container {
+    display: block;
+    margin: 0 auto;
+    width: 468px;
+    border-top: 1px solid #808080;
+    border-bottom: 1px solid #808080;
+    padding: 9px 0;
+}
+.blotter-item {
+    font-size: 12px;
+    line-height: 1.2;
+}
+.blotter-buttons {
+    display: block;
+    text-align: right;
+    font-size: 11px;
+    margin: 3px 0 0 0;
+}
+.hide-blotter-container {
+    display: inline-block;
+    cursor: pointer;
+}
+.show-all-blotter-container {
+    display: inline-block;
+    cursor: pointer;
+}
+.show-blotter {
+    cursor: pointer;
+}
+.top-container {
+    display: block;
+    padding: 6px 12px;
+    border-top: 1px solid #808080;
+    border-bottom: 1px solid #808080;
+}
+.top-container-list {
+    display: inline-block;
+}
+.top-link {
+    display: inline-block;
+    font-size: 13px;
+}
+.search-ops {
+    border: 1px solid #CCC;
+    display: inline-block;
+    background: #FFF;
+    padding: 3px;
+    font-size: 12px;
+    vertical-align: middle;
+}
+.catalog-link {
+    display: inline-block;
+    font-size: 13px;
+    vertical-align: middle;
+}

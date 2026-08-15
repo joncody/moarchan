@@ -1,0 +1,28 @@
+/*
+==============================
+SITE-WIDE
+==============================
+*/
+.hide {
+    display: none;
+}
+.blue-text-link {
+    color: #00E;
+    cursor: pointer;
+}
+.blue-text-link:hover {
+    color: #E00;
+}
+.blue-text {
+    color: #00E;
+}
+.red-text-link {
+    color: #800;
+    cursor: pointer;
+}
+.red-text-link:hover {
+    color: #E00;
+}
+.red-text {
+    color: #E00;
+}

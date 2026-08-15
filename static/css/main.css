@@ -1,0 +1,207 @@
+/*
+==============================
+MAIN
+==============================
+*/
+.header-container {
+    position: relative;
+}
+.box-header {
+    display: block;
+    font-size: 16px;
+    font-weight: bold;
+    color: #800;
+    padding: 0 12px;
+    line-height: 28px;
+}
+.box-message {
+    color: #111;
+    display: inline-block;
+    padding: 9px;
+    font-size: 12px;
+    line-height: 18px;
+}
+.pink-header {
+    background: #FCA;
+}
+.pink-section {
+    position: relative;
+    box-sizing: border-box;
+    display: block;
+    margin: 0 auto;
+    border: 1px solid #800;
+    background: #FFFFFF;
+    margin-bottom: 6px;
+}
+.filter-menu-button {
+    position: absolute;
+    right: 3px;
+    top: 0px;
+    font-size: 13px;
+    color: #800;
+    line-height: 20px;
+    cursor: pointer;
+    font-family: arial;
+}
+#main-latest-posts .filter-menu-button {
+    color: #FFF;
+}
+.filter-menu-button:after {
+    content: '▶';
+    margin-left: 3px;
+}
+.filter-container {
+    position: absolute;
+    display: block;
+    top: 0px;
+    right: 0px;
+}
+.filter-container:hover .filter-menu {
+    display: block;
+}
+.filter-menu {
+    position: relative;
+    display: none;
+    top: 24px;
+    right: 0px;
+    box-sizing: border-box;
+    border: 1px solid #999;
+    background: #FFFFFF;
+    box-shadow: 0 2px 3px 0 rgba(0, 0, 0, 0.3);
+    line-height: 1;
+    font-size: 12px;
+    height: auto;
+    overflow: hidden;
+    padding: 3px 0;
+    z-index: 1000;
+    transition: all 0ms ease 3s;
+}
+.filter-menu hr {
+    height: 1px;
+    background: #CCC;
+    margin: 3px 0;
+}
+.filter-menu-item {
+    padding: 3px 21px;
+    cursor: pointer;
+}
+#main-boards .filter-menu-item {
+    color: #800;
+}
+#main-boards .filter-menu-item:hover {
+    background: #FCE;
+}
+#main-latest-posts .filter-menu-item {
+    color: #006;
+}
+#main-latest-posts .filter-menu-item:hover {
+    background: #EFF;
+}
+.topics-list {
+    display: inline-block;
+    box-sizing: border-box;
+    width: 19%;
+    padding: 9px;
+    vertical-align: top;
+}
+.topics-list-header {
+    color: #800;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: bold;
+    padding-bottom: 3px;
+    text-decoration: underline;
+}
+.topics-list-item {
+    font-size: 12px;
+    padding-bottom: 3px;
+    color: #800;
+    cursor: pointer;
+}
+.topics-list-item:hover {
+    color: #C00;
+    text-decoration: underline;
+}
+.right-container {
+    box-sizing: border-box;
+    display: inline-block;
+    width: 49.5%;
+    margin-left: 1%;
+}
+.left-container {
+    box-sizing: border-box;
+    display: inline-block;
+    width: 49.5%;
+}
+.blue-section {
+    position: relative;
+    box-sizing: border-box;
+    display: block;
+    margin: 0 auto 9px;
+    border: 1px solid #003;
+}
+.blue-header {
+    background: #59A;
+    color: #FFF;
+}
+.green-section {
+    background: #EFE;
+    position: relative;
+    box-sizing: border-box;
+    display: block;
+    margin: 0 auto 9px;
+    border: 1px solid #030;
+}
+.green-header {
+    background: #9C6;
+    color: #060;
+}
+.main-footer {
+    border-top: 1px solid #800;
+    display: block; 
+    text-align: center;
+    margin-top: 12px;
+}
+.main-footer-item {
+    color: #800;
+    display: inline-block;
+    border-left: 1px solid #800;
+    border-bottom: 1px solid #800;
+    background: #FED;
+    font-size: 13px;
+    padding: 3px 12px;
+    cursor: pointer;
+}
+.main-footer-item:last-child {
+    border-left: 1px solid #800;
+    border-bottom: 1px solid #800;
+    border-right: 1px solid #800;
+}
+.main-footer-item:hover {
+    text-decoration: underline;
+}
+.index-lower-footer {
+    display: block;
+}
+.lower-footer {
+    display: block;
+    margin-top: 30px;
+    text-align: center;
+    font-size: 11px;
+}
+.lower-footer-list {
+    margin: 0;
+    padding: 0;
+}
+.lower-footer-item {
+    color: #00F;
+    display: inline-block;
+    text-decoration: underline;
+    margin: 0 3px;
+    cursor: pointer;
+}
+.copyright {
+    display: inline-block;
+    color: #800;
+    margin: 6px 0 18px;
+}

@@ -1,0 +1,84 @@
+/*
+==============================
+THREAD
+==============================
+*/
+.thread {
+    position: relative;
+    display: block;
+    padding: 9px;
+    border-bottom: 1px solid #808080;
+}
+.spacer {
+    clear: both;
+}
+.show-summary .post-summary-container {
+    display: block;
+}
+.sticky-thread .post-thumbtack.op {
+    display: inline;
+}
+.lock-thread .post-lock.op {
+    display: inline;
+}
+.hide-thread .post-show-hide-thread.minus {
+    display: none;
+}
+.hide-thread .post-show-hide-thread.plus {
+    display: inline;
+}
+.hide-thread .thread-container {
+    display: none;
+}
+.hide-thread .post-show-hide-icons.op {
+    opacity: 0.5;
+}
+.hide-thread .post-image-metadata.op {
+    display: none;
+}
+.hide-thread .post-image.op {
+    display: none;
+}
+.hide-thread .post-header.op {
+    margin-top: 0px;
+    left: 18px;
+}
+.hide-thread .post-checkbox.op {
+    display: none;
+}
+.hide-thread .post-subject.op {
+    opacity: 0.5;
+}
+.hide-thread .post-username.op {
+    opacity: 0.5;
+}
+.hide-thread .post-date.op {
+    opacity: 0.5;
+}
+.hide-thread .post-link-to.op {
+    opacity: 0.5;
+}
+.hide-thread .post-reply-to.op {
+    opacity: 0.5;
+}
+.hide-thread .post-thumbtack.op {
+    opacity: 0.5;
+}
+.hide-thread .post-lock.op {
+    opacity: 0.5;
+}
+.hide-thread .post-options-arrow {
+    opacity: 0.5;
+}
+.hide-thread .post-reply-to-text.op {
+    display: none;
+}
+.hide-thread .post-options-menu li.unhide-post.op {
+    display: list-item;
+}
+.hide-thread .post-options-menu li.hide-post.op {
+    display: none;
+}
+.hide-thread .post-tag {
+    display: none;
+}

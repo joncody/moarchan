@@ -1,0 +1,24 @@
+/*
+==============================
+ADVERTISE
+==============================
+*/
+#advertise-box-message {
+    color: #800;
+}
+#advertise-box-message .red-text {
+    display: block;
+    font-weight: bold;
+    text-align: center;
+}
+.advertise-line {
+    display: block;
+    background: #800;
+    height: 2px;
+    margin: 6px 0;
+}
+.advertise-pitch {
+    display: block;
+    font-weight: bold;
+    text-align: center;
+}

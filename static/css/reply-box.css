@@ -1,0 +1,80 @@
+/*
+==============================
+REPLY BOX
+==============================
+*/
+.reply-box {
+    background: #F0E0D6;
+    padding: 3px;
+    position: fixed;
+    display: block;
+    z-index: 9999;
+    box-shadow: 1px 1px 6px 0 rgba(0,0,0,0.6);
+}
+.reply-box-header {
+    background: #EA8;
+    border: 1px solid #800;
+    color: #800;
+    display: block;
+    font-size: 12px;
+    font-weight: bold;
+    line-height: 18px;
+    text-align: center;
+    margin-bottom: 1px;
+    cursor: grabbing;
+    cursor: -webkit-grabbing;
+}
+.reply-box-header-text {
+    display: inline-block;
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.reply-box-close {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    float: right;
+    cursor: pointer;
+}
+.reply-box-input {
+    background: #FFF;
+    display: block;
+    border: 1px solid #AAA;
+    color: #333;
+    padding: 3px;
+    font-size: 14px;
+    width: 300px;
+    margin: 0 0 1px;
+    line-height: 1.2;
+}
+.reply-box-input:focus {
+    border: 1px solid #EA8;
+}
+.reply-box-textarea {
+    background: #FFF;
+    border: 1px solid #AAA;
+    color: #333;
+    display: block;
+    font-size: 14px;
+    margin: 0 auto 1px;
+    padding: 3px;
+    min-width: 300px;
+    height: 100px;
+}
+.reply-box-textarea:focus {
+    border: 1px solid #EA8;
+}
+.reply-box-buttons {
+    color: #000;
+    display: block;
+    padding: 2px;
+}
+.reply-box-file {
+    display: inline-block;
+    font-size: 13px;
+}
+.reply-box-post {
+    float: right;
+}

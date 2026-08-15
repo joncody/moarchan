@@ -1,0 +1,36 @@
+/*
+==============================
+NEWS
+==============================
+*/
+.news-post {
+    padding: 5px;
+}
+.news-reel {
+    padding: 5px;
+}
+.news-header {
+    background: #FFE;
+    border: 1px solid #800;
+    color: #800;
+    font-size: 14px;
+    font-weight: bold;
+    padding: 9px;
+}
+.news-hash {
+    float: right;
+}
+.news-image-container {
+    display: block;
+    margin-top: 12px;
+    text-align: center;
+}
+.news-image-link {
+    position: relative;
+    display: inline-block;
+}
+.news-image {
+    display: block;
+    max-width: 98%;
+    border: 2px solid #00E;
+}

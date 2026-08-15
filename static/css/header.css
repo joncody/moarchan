@@ -1,0 +1,23 @@
+/*
+==============================
+HEADER
+==============================
+*/
+.moarchan-header {
+    display: block;
+    text-align: center;
+    padding: 10px 0;
+}
+.moarchan-clover {
+    display: inline-block;
+    height: 100px;
+    vertical-align: middle;
+    cursor: pointer;
+}
+.moarchan-text {
+    font-size: 48px;
+    font-weight: bold;
+    display: inline-block;
+    vertical-align: middle;
+    color: #800;
+}
