@@ -1,0 +1,32 @@
+{{ define "auth" }}
+    <div class="page">
+        {{ template "header" }}
+        <div class="pink-section auth-section">
+            <div class="header-container">
+                <h3 class="box-header pink-header auth-title">Login / Register</h3>
+            </div>
+            <div class="auth-container">
+                <form class="auth-form" onsubmit="return false;">
+                    <div class="new-post-field-row">
+                        <label class="new-post-label" for="auth-alias">Alias</label>
+                        <input id="auth-alias" class="new-post-input form-input" type="text" name="alias" placeholder="Username (3-64 chars)" autocomplete="username" />
+                    </div>
+                    <div class="new-post-field-row">
+                        <label class="new-post-label" for="auth-password">Password</label>
+                        <input id="auth-password" class="new-post-input form-input" type="password" name="password" placeholder="Password (8-72 chars)" autocomplete="current-password" />
+                    </div>
+                    <div id="auth-repeat-row" class="new-post-field-row hide">
+                        <label class="new-post-label" for="auth-password-repeat">Repeat</label>
+                        <input id="auth-password-repeat" class="new-post-input form-input" type="password" name="password-repeat" placeholder="Repeat Password" autocomplete="new-password" />
+                    </div>
+                    <div class="auth-footer">
+                        <span class="form-toggler blue-text-link">Switch to Register</span>
+                        <button id="auth-submit-btn" class="form-button grey-button" type="button" name="enter">Login</button>
+                    </div>
+                    <div id="auth-message" class="auth-message hide"></div>
+                </form>
+            </div>
+        </div>
+        {{ template "main-footer" }}
+    </div>
+{{ end }}

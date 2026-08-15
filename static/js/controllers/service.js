@@ -32,6 +32,18 @@ function getFirstData(nodeOrEvent, key) {
     return dataVal;
 }
 
+function escapeHtml(str) {
+    if (typeof str !== "string") {
+        return "";
+    }
+    return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 frame.controllers.service = function service(global) {
     const topicsMap = {
         "3": "3DCG",
@@ -156,7 +168,6 @@ frame.controllers.service = function service(global) {
             dom("#post-" + hash).toggleClass("hide-thread");
         }
     }
-    dom(".post-show-hide-thread").on("click", toggleThread, false);
 
     function toggleReplies(e, node) {
         if (e && typeof e.preventDefault === "function") {
@@ -187,7 +198,6 @@ frame.controllers.service = function service(global) {
         }
         frame.assignHrefs();
     }
-    dom(".post-show-hide-replies").on("click", toggleReplies, false);
 
     function hidePost(e, node) {
         if (e && typeof e.preventDefault === "function") {
@@ -205,7 +215,6 @@ frame.controllers.service = function service(global) {
         }
         dom(".post-options-menu").addClass("hide");
     }
-    dom(".hide-post").on("click", hidePost, false);
 
     function unhidePost(e, node) {
         if (e && typeof e.preventDefault === "function") {
@@ -223,7 +232,6 @@ frame.controllers.service = function service(global) {
         }
         dom(".post-options-menu").addClass("hide");
     }
-    dom(".unhide-post").on("click", unhidePost, false);
 
     function hidePostOptions(e, node, arg) {
         const targetNode = getNode(e, node);
@@ -247,7 +255,6 @@ frame.controllers.service = function service(global) {
             dom(document.body).once("click", hidePostOptions, false, menu);
         }, 0);
     }
-    dom(".post-options-arrow").on("click", showPostOptions, false);
 
     function clearForms() {
         const fields = [
@@ -457,7 +464,6 @@ frame.controllers.service = function service(global) {
     }
 
     replyBoxHeader.on("mousedown", startDrag, false);
-    dom(".post-reply-to").on("click", openReplyBox, false);
 
     function initReplies(hash) {
         const threadDom = dom("#post-" + hash);
@@ -483,14 +489,6 @@ frame.controllers.service = function service(global) {
         frame.assignHrefs();
     }
 
-    if (!isThreadView) {
-        dom(".thread").each(function (node) {
-            if (node && node.id) {
-                initReplies(node.id.slice(5));
-            }
-        });
-    }
-
     function goToTaggedPost(e) {
         const tag = getFirstData(e, "tag");
         if (!tag) {
@@ -502,7 +500,7 @@ frame.controllers.service = function service(global) {
         }
         dom(".highlight").removeClass("highlight");
         const el = tagged.get(0);
-        if (el) {
+        if (el && typeof el.scrollIntoView === "function") {
             el.scrollIntoView({
                 behavior: "smooth",
                 block: "center"
@@ -517,7 +515,9 @@ frame.controllers.service = function service(global) {
         const tag = getFirstData(e, "tag");
         if (tag) {
             const tagged = dom("#post-" + tag);
-            tagged.removeClass("highlight-hover");
+            if (tagged.length() > 0) {
+                tagged.removeClass("highlight-hover");
+            }
         }
         dom(".tag-hover-clone").remove();
     }
@@ -528,8 +528,11 @@ frame.controllers.service = function service(global) {
             return;
         }
         const tagged = dom("#post-" + tag);
+        if (tagged.length() === 0) {
+            return;
+        }
         const el = tagged.get(0);
-        if (!el) {
+        if (!el || typeof el.getBoundingClientRect !== "function") {
             return;
         }
 
@@ -576,114 +579,7 @@ frame.controllers.service = function service(global) {
         });
     }
 
-    bindPostTags();
-
-    function addThread(data) {
-        if (!data || !data.hash) {
-            return;
-        }
-        if (document.getElementById("post-" + data.hash) !== null) {
-            return;
-        }
-
-        const subject = data.subject || "";
-        const name = data.name || "Anonymous";
-        const fileName = data.file_name || "";
-        const fileSize = data.file_size || "0";
-        const fileDimensions = data.file_dimensions || "???x???";
-        const comment = data.comment || "";
-        const timestamp = data.timestamp || new Date().toISOString();
-
-        const htmlString = [
-            "<div id=\"post-", data.hash, "\" class=\"thread\">",
-            "<div class=\"post-show-hide-icons op\">",
-            "<img class=\"post-show-hide-thread plus\" data-post=\"",
-            data.hash,
-            "\" src=\"/static/images/show-hide-thread-plus-red.png\" ",
-            "alt=\"Plus\" title=\"Plus\" />",
-            "<img class=\"post-show-hide-thread minus\" data-post=\"",
-            data.hash,
-            "\" src=\"/static/images/show-hide-thread-minus-red.png\" ",
-            "alt=\"Minus\" title=\"Minus\" />",
-            "</div>",
-            "<div class=\"post-image-metadata op\">",
-            "File: <a class=\"post-image-link blue-text-link op\" ",
-            "href=\"/static/images/uploads/", fileName, "\" ",
-            "alt=\"", fileName, "\" title=\"", fileName, "\" ",
-            "target=\"_blank\">", fileName, "</a>",
-            "<span class=\"post-image-dimensions op\">(",
-            fileSize, " KB, ", fileDimensions, ")</span>",
-            "</div>",
-            "<a class=\"post-image-container op\" ",
-            "href=\"/static/images/uploads/", fileName, "\" target=\"_blank\">",
-            "<img class=\"post-image op\" ",
-            "src=\"/static/images/uploads/", fileName, "\" ",
-            "alt=\"", fileName, "\" title=\"", fileName, "\" />",
-            "</a>",
-            "<div class=\"post-header op\">",
-            "<input class=\"post-checkbox op\" type=\"checkbox\" />",
-            "<span class=\"post-subject op\">", subject, "</span>",
-            "<span class=\"post-username op\">", name, "</span>",
-            "<span class=\"post-date op\">", timestamp, "</span>",
-            "<span class=\"post-link-to red-text-link op\" ",
-            "title=\"Link to this post\" data-href=\"/",
-            data.topic, "/thread/", data.hash, "\">No.</span>",
-            "<span class=\"post-reply-to red-text-link op\" ",
-            "title=\"Reply to this post\" data-thread=\"",
-            data.hash, "\">", data.hash, "</span>",
-            "<img class=\"post-thumbtack op\" ",
-            "src=\"/static/images/thumbtack.gif\" ",
-            "alt=\"Sticky\" title=\"Sticky\" />",
-            "<img class=\"post-lock op\" ",
-            "src=\"/static/images/lock.gif\" ",
-            "alt=\"Closed\" title=\"Closed\" />",
-            "<span class=\"post-reply-to-text op\">[",
-            "<span class=\"reply-link blue-text-link\" data-href=\"/",
-            data.topic, "/thread/", data.hash, "\">Reply</span>]</span>",
-            "<div class=\"post-options op\" title=\"Post menu\">",
-            "<span class=\"post-options-arrow op\" data-post=\"",
-            data.hash, "\"></span>",
-            "<ul id=\"post-menu-", data.hash, "\" ",
-            "class=\"post-options-menu hide op\">",
-            "<li class=\"report-post op\" data-post=\"",
-            data.hash, "\">Report Thread</li>",
-            "<li class=\"hide-post op\" data-post=\"",
-            data.hash, "\">Hide Thread</li>",
-            "<li class=\"unhide-post op\" data-post=\"",
-            data.hash, "\">Unhide Thread</li>",
-            "<li class=\"image-search op\" data-post=\"",
-            data.hash, "\">Image Search &gt;&gt;</li>",
-            "</ul>",
-            "</div>",
-            "</div>",
-            "<div class=\"thread-container\">",
-            "<p class=\"post-content op\">", comment, "</p>",
-            "<div class=\"post-summary-container\">",
-            "<div class=\"post-show-hide-icons replies\">",
-            "<img class=\"post-show-hide-replies plus\" data-post=\"",
-            data.hash,
-            "\" src=\"/static/images/show-hide-thread-plus-red.png\" ",
-            "alt=\"Plus\" title=\"Plus\" />",
-            "<img class=\"post-show-hide-replies minus\" data-post=\"",
-            data.hash,
-            "\" src=\"/static/images/show-hide-thread-minus-red.png\" ",
-            "alt=\"Minus\" title=\"Minus\" />",
-            "</div>",
-            "<p class=\"post-summary\">0 posts omitted. ",
-            "<span class=\"blue-text-link\" data-href=\"/",
-            data.topic, "/thread/", data.hash,
-            "\">Click here</span> to view.</p>",
-            "</div>",
-            "</div>",
-            "<div class=\"spacer\"></div>",
-            "</div>"
-        ].join("");
-
-        const boardEl = dom(".board").get(0);
-        if (boardEl) {
-            boardEl.insertAdjacentHTML("beforeend", htmlString);
-        }
-        const threadEl = dom("#post-" + data.hash);
+    function bindThreadEvents(threadEl) {
         threadEl.selectAll(".post-show-hide-thread").on(
             "click",
             toggleThread,
@@ -702,18 +598,46 @@ frame.controllers.service = function service(global) {
             false
         );
         threadEl.selectAll(".post-reply-to").on("click", openReplyBox, false);
-        bindPostTags();
-        frame.assignHrefs();
     }
 
-    function addReply(data) {
-        if (!data || !data.hash) {
+    function bindReplyEvents(replyEl) {
+        replyEl.selectAll(".hide-post").on("click", hidePost, false);
+        replyEl.selectAll(".unhide-post").on("click", unhidePost, false);
+        replyEl.selectAll(".post-options-arrow").on(
+            "click",
+            showPostOptions,
+            false
+        );
+        replyEl.selectAll(".post-reply-to").on("click", openReplyBox, false);
+    }
+
+    function addThread(data) {
+        if (!data || !data.hash || !data.html) {
             return;
         }
         if (document.getElementById("post-" + data.hash) !== null) {
             return;
         }
 
+        const boardEl = dom(".board").get(0);
+        if (boardEl) {
+            boardEl.insertAdjacentHTML("beforeend", data.html);
+        }
+        const threadEl = dom("#post-" + data.hash);
+        bindThreadEvents(threadEl);
+        bindPostTags();
+        frame.assignHrefs();
+    }
+
+    function addReply(data) {
+        if (!data || !data.hash || !data.html) {
+            return;
+        }
+        if (document.getElementById("post-" + data.hash) !== null) {
+            return;
+        }
+
+        const safeHash = escapeHtml(data.hash);
         if (Array.isArray(data.tagging)) {
             data.tagging.forEach(function (tag) {
                 const isOp = (tag === data.thread);
@@ -725,9 +649,9 @@ frame.controllers.service = function service(global) {
                     "<span class=\"post-tag blue-text-link" +
                     opClass +
                     "\" data-tag=\"" +
-                    data.hash +
+                    safeHash +
                     "\">&gt;&gt;" +
-                    data.hash +
+                    safeHash +
                     "</span>"
                 );
                 const header = dom("#post-" + tag + " .post-header");
@@ -737,102 +661,104 @@ frame.controllers.service = function service(global) {
             });
         }
 
-        let fileNameEscaped = "";
-        let fileBlock = "";
-        if (data.file_name) {
-            fileNameEscaped = data.file_name;
-            const fileSizeKb = data.file_size || "0";
-            const dims = data.file_dimensions || "???x???";
-            fileBlock = [
-                "<div class=\"post-image-metadata\">",
-                "File: <a class=\"post-image-link blue-text-link\" ",
-                "href=\"/static/images/uploads/", fileNameEscaped, "\" ",
-                "alt=\"", fileNameEscaped, "\" ",
-                "title=\"", fileNameEscaped, "\" ",
-                "target=\"_blank\">", fileNameEscaped, "</a>",
-                "<span class=\"post-image-dimensions\">(",
-                fileSizeKb, " KB, ", dims, ")</span>",
-                "</div>",
-                "<a class=\"post-image-container\" ",
-                "href=\"/static/images/uploads/", fileNameEscaped, "\" ",
-                "target=\"_blank\">",
-                "<img class=\"post-image\" ",
-                "src=\"/static/images/uploads/", fileNameEscaped, "\" ",
-                "title=\"", fileNameEscaped, "\" ",
-                "alt=\"", fileNameEscaped, "\" />",
-                "</a>"
-            ].join("");
-        }
-
-        let imgSearchBlock = "";
-        if (data.file_name) {
-            imgSearchBlock = (
-                "<li class=\"image-search\" data-post=\"" +
-                data.hash +
-                "\">Image Search &gt;&gt;</li>"
-            );
-        }
-
-        const replyHtml = [
-            "<div class=\"reply-container\">",
-            "<div class=\"reply-wrapper\">",
-            "<span class=\"post-side-arrows\">&gt;&gt;</span>",
-            "<div id=\"post-", data.hash, "\" class=\"reply\">",
-            "<div class=\"post-header\">",
-            "<input class=\"post-checkbox\" type=\"checkbox\" />",
-            "<span class=\"post-username\">",
-            (data.name || "Anonymous"),
-            "</span>",
-            "<span class=\"post-date\">",
-            (data.timestamp || new Date().toISOString()),
-            "</span>",
-            "<span class=\"post-link-to red-text-link\" ",
-            "title=\"Link to this post\">No.</span>",
-            "<span class=\"post-reply-to red-text-link\" ",
-            "title=\"Reply to this post\" data-thread=\"",
-            data.thread, "\">", data.hash, "</span>",
-            "<div class=\"post-options\" title=\"Post menu\">",
-            "<span class=\"post-options-arrow\" data-post=\"",
-            data.hash, "\"></span>",
-            "<ul id=\"post-menu-", data.hash, "\" ",
-            "class=\"post-options-menu hide\">",
-            "<li class=\"report-post\" data-post=\"",
-            data.hash, "\">Report Post</li>",
-            "<li class=\"hide-post\" data-post=\"",
-            data.hash, "\">Hide Post</li>",
-            "<li class=\"unhide-post\" data-post=\"",
-            data.hash, "\">Unhide Post</li>",
-            imgSearchBlock,
-            "</ul>",
-            "</div>",
-            "</div>",
-            fileBlock,
-            "<p class=\"post-content\">", (data.comment || ""), "</p>",
-            "</div>",
-            "</div>",
-            "</div>"
-        ].join("");
-
         const threadContainer = dom(
             "#post-" + data.thread + " .thread-container"
         );
         if (threadContainer.length() > 0) {
-            threadContainer.get(0).insertAdjacentHTML("beforeend", replyHtml);
+            threadContainer.get(0).insertAdjacentHTML("beforeend", data.html);
         }
 
         const replyEl = dom("#post-" + data.hash);
-        replyEl.selectAll(".hide-post").on("click", hidePost, false);
-        replyEl.selectAll(".unhide-post").on("click", unhidePost, false);
-        replyEl.selectAll(".post-options-arrow").on(
-            "click",
-            showPostOptions,
-            false
-        );
-        replyEl.selectAll(".post-reply-to").on("click", openReplyBox, false);
-
+        bindReplyEvents(replyEl);
         bindPostTags();
         initReplies(data.thread);
     }
+
+    function removePost(data) {
+        if (!data || !data.hash) {
+            return;
+        }
+        const postEl = dom("#post-" + data.hash);
+        if (postEl.length() === 0) {
+            return;
+        }
+        if (data.file_only) {
+            postEl.select(".post-image-metadata").remove();
+            postEl.select(".post-image-container").remove();
+        } else {
+            if (postEl.hasClass("reply")) {
+                const container = postEl.parents().select(".reply-container");
+                if (container.length() > 0) {
+                    container.remove();
+                } else {
+                    postEl.remove();
+                }
+            } else {
+                postEl.remove();
+            }
+        }
+    }
+
+    function deleteSelectedPosts(e) {
+        if (e && typeof e.preventDefault === "function") {
+            e.preventDefault();
+        }
+        const checkedBoxes = Array.from(document.querySelectorAll(".post-checkbox:checked"));
+        if (checkedBoxes.length === 0) {
+            return global.alert("No posts selected for deletion.");
+        }
+
+        const fileOnlyCheckbox = dom("input[name='file-only']").get(0);
+        const fileOnly = fileOnlyCheckbox && fileOnlyCheckbox.checked;
+
+        if (!global.confirm("Are you sure you want to delete the selected item(s)?")) {
+            return;
+        }
+
+        checkedBoxes.forEach(function (box) {
+            let container = box.closest(".reply");
+            if (!container) {
+                container = box.closest(".thread");
+            }
+            if (container && container.id && container.id.startsWith("post-")) {
+                const hash = container.id.slice(5);
+                const fd = new FormData();
+                fd.append("hash", hash);
+                if (fileOnly) {
+                    fd.append("file_only", "true");
+                }
+
+                fetch("/api/posts/delete", {
+                    method: "POST",
+                    body: fd
+                }).then(function (res) {
+                    if (!res.ok) {
+                        return res.text().then(function (errText) {
+                            console.warn("Deletion error:", errText);
+                        });
+                    }
+                }).catch(function (err) {
+                    console.error("Delete request failed:", err);
+                });
+            }
+        });
+    }
+
+    // Initial binding for existing server-rendered posts
+    bindThreadEvents(dom(".board"));
+    bindReplyEvents(dom(".board"));
+    bindPostTags();
+    dom(".post-reply-to").on("click", openReplyBox, false);
+
+    if (!isThreadView) {
+        dom(".thread").each(function (node) {
+            if (node && node.id) {
+                initReplies(node.id.slice(5));
+            }
+        });
+    }
+
+    dom("button.delete").on("click", deleteSelectedPosts, false);
 
     const streamCleanup = frame.subscribeToStream(topic, {
         "new-reply": function (data) {
@@ -840,6 +766,9 @@ frame.controllers.service = function service(global) {
         },
         "new-thread": function (data) {
             addThread(data);
+        },
+        "delete-post": function (data) {
+            removePost(data);
         }
     });
 
@@ -847,6 +776,7 @@ frame.controllers.service = function service(global) {
         if (typeof streamCleanup === "function") {
             streamCleanup();
         }
+        dom("button.delete").off("click");
         dom(document.body).off("mousemove", dragging, false);
         dom(document.body).off("click");
     };

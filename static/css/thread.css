@@ -5,7 +5,8 @@ THREAD
 */
 .thread {
     position: relative;
-    display: block;
+    display: flex;
+    flex-direction: column;
     padding: 9px;
     border-bottom: 1px solid #808080;
 }
@@ -13,7 +14,7 @@ THREAD
     clear: both;
 }
 .show-summary .post-summary-container {
-    display: block;
+    display: flex;
 }
 .sticky-thread .post-thumbtack.op {
     display: inline;

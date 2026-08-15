@@ -5,14 +5,17 @@ TOPICS NAV
 */
 .topics-nav {
     position: relative;
-    display: block;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     padding: 4px;
     clear: both;
 }
 .topics-nav li {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
     font-size: 12px;
-    padding: 4px 4px 0 0;
+    padding: 2px 4px 2px 0;
 }
 .topics-nav li span {
     cursor: pointer;
@@ -21,8 +24,11 @@ TOPICS NAV
     color: #E00;
 }
 .settings-link {
-    float: right;
+    margin-left: 6px;
 }
 .home-link {
-    float: right;
+    margin-left: auto;
+}
+.auth-nav-link {
+    margin-left: 6px;
 }

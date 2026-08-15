@@ -1,16 +1,16 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"html"
 	"image"
-	_ "image/gif"
-	_ "image/jpeg"
-	_ "image/png"
-	"io"
+	"image/gif"
+	"image/jpeg"
+	"image/png"
 	"log"
 	"mime/multipart"
 	"net/http"
@@ -93,6 +93,47 @@ func sanitizeComment(raw string) (string, []string) {
 	return strings.Join(formattedLines, "<br />"), tags
 }
 
+func createThumbnail(src image.Image, maxW, maxH int) image.Image {
+	bounds := src.Bounds()
+	w := bounds.Dx()
+	h := bounds.Dy()
+	if w <= maxW && h <= maxH {
+		return src
+	}
+
+	ratioW := float64(maxW) / float64(w)
+	ratioH := float64(maxH) / float64(h)
+	scale := ratioW
+	if ratioH < ratioW {
+		scale = ratioH
+	}
+
+	newW := int(float64(w) * scale)
+	newH := int(float64(h) * scale)
+	if newW < 1 {
+		newW = 1
+	}
+	if newH < 1 {
+		newH = 1
+	}
+
+	dst := image.NewRGBA(image.Rect(0, 0, newW, newH))
+	for y := 0; y < newH; y++ {
+		for x := 0; x < newW; x++ {
+			srcX := int(float64(x) / scale)
+			srcY := int(float64(y) / scale)
+			if srcX >= w {
+				srcX = w - 1
+			}
+			if srcY >= h {
+				srcY = h - 1
+			}
+			dst.Set(x, y, src.At(bounds.Min.X+srcX, bounds.Min.Y+srcY))
+		}
+	}
+	return dst
+}
+
 func processMultipartUpload(fileHeader *multipart.FileHeader, uniqueID string) (*FileDetails, error) {
 	if fileHeader == nil {
 		return &FileDetails{}, nil
@@ -130,6 +171,7 @@ func processMultipartUpload(fileHeader *multipart.FileHeader, uniqueID string) (
 	}
 	safeName := fmt.Sprintf("%s_%s", uniqueID, baseName)
 	savePath := fmt.Sprintf("./static/images/uploads/%s", safeName)
+	thumbPath := fmt.Sprintf("./static/images/uploads/thumb_%s", safeName)
 
 	if err := os.MkdirAll("./static/images/uploads", 0755); err != nil {
 		return nil, fmt.Errorf("create uploads directory: %w", err)
@@ -141,16 +183,63 @@ func processMultipartUpload(fileHeader *multipart.FileHeader, uniqueID string) (
 	}
 	defer out.Close()
 
-	written, err := io.Copy(out, file)
+	thumbOut, err := os.OpenFile(thumbPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
-		return nil, fmt.Errorf("write uploaded file to disk: %w", err)
+		return nil, fmt.Errorf("create thumbnail destination file: %w", err)
+	}
+	defer thumbOut.Close()
+
+	// Re-encode image binary to strip all EXIF/GPS metadata and generate a scaled thumbnail
+	switch format {
+	case "jpeg":
+		img, err := jpeg.Decode(file)
+		if err != nil {
+			return nil, fmt.Errorf("decode jpeg binary: %w", err)
+		}
+		if err := jpeg.Encode(out, img, &jpeg.Options{Quality: 90}); err != nil {
+			return nil, fmt.Errorf("re-encode jpeg: %w", err)
+		}
+		thumbImg := createThumbnail(img, 250, 250)
+		_ = jpeg.Encode(thumbOut, thumbImg, &jpeg.Options{Quality: 85})
+
+	case "png":
+		img, err := png.Decode(file)
+		if err != nil {
+			return nil, fmt.Errorf("decode png binary: %w", err)
+		}
+		if err := png.Encode(out, img); err != nil {
+			return nil, fmt.Errorf("re-encode png: %w", err)
+		}
+		thumbImg := createThumbnail(img, 250, 250)
+		_ = png.Encode(thumbOut, thumbImg)
+
+	case "gif":
+		gifImg, err := gif.DecodeAll(file)
+		if err != nil {
+			return nil, fmt.Errorf("decode gif binary: %w", err)
+		}
+		if err := gif.EncodeAll(out, gifImg); err != nil {
+			return nil, fmt.Errorf("re-encode gif: %w", err)
+		}
+		if len(gifImg.Image) > 0 {
+			thumbImg := createThumbnail(gifImg.Image[0], 250, 250)
+			_ = jpeg.Encode(thumbOut, thumbImg, &jpeg.Options{Quality: 85})
+		}
+
+	default:
+		return nil, fmt.Errorf("unsupported image format %q", format)
+	}
+
+	fileInfo, err := out.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("stat destination file: %w", err)
 	}
 
 	return &FileDetails{
 		Name:       safeName,
 		Path:       savePath,
 		Mime:       "image/" + format,
-		Size:       fmt.Sprintf("%.1f", float64(written)/1024.0),
+		Size:       fmt.Sprintf("%.1f", float64(fileInfo.Size())/1024.0),
 		Dimensions: fmt.Sprintf("%dx%d", config.Width, config.Height),
 	}, nil
 }
@@ -230,7 +319,41 @@ func handleCreateThread(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	thread := Thread{
+	threadMap := map[string]interface{}{
+		"hash":            hash,
+		"topic":           topic,
+		"name":            name,
+		"subject":         subject,
+		"options":         rawOpt,
+		"comment":         comment,
+		"file_name":       fileDetails.Name,
+		"file_mime":       fileDetails.Mime,
+		"file_size":       fileDetails.Size,
+		"file_dimensions": fileDetails.Dimensions,
+		"timestamp":       timestamp,
+		"replies":         map[string]interface{}{},
+		"taggedBy":        []string{},
+		"tagging":         []string{},
+	}
+
+	var buf bytes.Buffer
+	if err := app.Templates.ExecuteTemplate(&buf, "thread-item", threadMap); err != nil {
+		log.Println("Render thread fragment error:", err)
+	}
+
+	ssePayload, err := json.Marshal(map[string]interface{}{
+		"hash":  hash,
+		"topic": topic,
+		"html":  buf.String(),
+	})
+	if err != nil {
+		http.Error(w, "Serialization error", http.StatusInternalServerError)
+		return
+	}
+
+	app.Hub.Broadcast(topic, "new-thread", ssePayload)
+
+	threadObj := Thread{
 		Hash:           hash,
 		Topic:          topic,
 		Name:           name,
@@ -246,14 +369,7 @@ func handleCreateThread(w http.ResponseWriter, r *http.Request) {
 		TaggedBy:       []string{},
 		Tagging:        []string{},
 	}
-
-	payload, err := json.Marshal(&thread)
-	if err != nil {
-		http.Error(w, "Serialization error", http.StatusInternalServerError)
-		return
-	}
-
-	app.Hub.Broadcast(topic, "new-thread", payload)
+	payload, _ := json.Marshal(&threadObj)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -341,7 +457,42 @@ func handleCreateReply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reply := Reply{
+	replyMap := map[string]interface{}{
+		"hash":            hash,
+		"thread":          threadHash,
+		"topic":           topic,
+		"name":            name,
+		"options":         rawOpt,
+		"comment":         comment,
+		"file_name":       fileDetails.Name,
+		"file_mime":       fileDetails.Mime,
+		"file_size":       fileDetails.Size,
+		"file_dimensions": fileDetails.Dimensions,
+		"timestamp":       timestamp,
+		"taggedBy":        []string{},
+		"tagging":         tags,
+	}
+
+	var buf bytes.Buffer
+	if err := app.Templates.ExecuteTemplate(&buf, "reply-item", replyMap); err != nil {
+		log.Println("Render reply fragment error:", err)
+	}
+
+	ssePayload, err := json.Marshal(map[string]interface{}{
+		"hash":    hash,
+		"thread":  threadHash,
+		"topic":   topic,
+		"tagging": tags,
+		"html":    buf.String(),
+	})
+	if err != nil {
+		http.Error(w, "Serialization error", http.StatusInternalServerError)
+		return
+	}
+
+	app.Hub.Broadcast(topic, "new-reply", ssePayload)
+
+	replyObj := Reply{
 		Hash:           hash,
 		Thread:         threadHash,
 		Topic:          topic,
@@ -356,18 +507,52 @@ func handleCreateReply(w http.ResponseWriter, r *http.Request) {
 		TaggedBy:       []string{},
 		Tagging:        tags,
 	}
-
-	payload, err := json.Marshal(&reply)
-	if err != nil {
-		http.Error(w, "Serialization error", http.StatusInternalServerError)
-		return
-	}
-
-	app.Hub.Broadcast(topic, "new-reply", payload)
+	payload, _ := json.Marshal(&replyObj)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	w.Write(payload)
+}
+
+func handleDeletePost(w http.ResponseWriter, r *http.Request) {
+	hash := strings.TrimSpace(r.FormValue("hash"))
+	fileOnly := r.FormValue("file_only") == "true" || r.FormValue("file_only") == "on"
+
+	if hash == "" {
+		http.Error(w, "Post or thread hash is required", http.StatusBadRequest)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	info, err := DeletePostOrFile(ctx, app.Driver, hash, fileOnly)
+	if err != nil {
+		log.Println("Delete post error:", err)
+		http.Error(w, fmt.Sprintf("Failed to delete: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Remove corresponding image files from disk
+	if info.FileName != "" {
+		_ = os.Remove(fmt.Sprintf("./static/images/uploads/%s", info.FileName))
+		_ = os.Remove(fmt.Sprintf("./static/images/uploads/thumb_%s", info.FileName))
+	}
+
+	eventPayload, _ := json.Marshal(map[string]interface{}{
+		"hash":      info.Hash,
+		"topic":     info.Topic,
+		"file_only": fileOnly,
+	})
+	app.Hub.Broadcast(info.Topic, "delete-post", eventPayload)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":    "ok",
+		"hash":      info.Hash,
+		"file_only": fileOnly,
+	})
 }
 
 func main() {
@@ -378,6 +563,7 @@ func main() {
 	}
 
 	// 1. Programmatic Route Declarations (Fluent Go API)
+	app.Route("/auth").Template("auth").Controller("auth")
 	app.Route("/news").Template("news")
 	app.Route("/blog").Template("blog")
 	app.Route("/faq").Template("faq")
@@ -419,6 +605,7 @@ func main() {
 	// 4. REST Endpoints
 	app.Router.HandleFunc("/api/threads", handleCreateThread).Methods("POST")
 	app.Router.HandleFunc("/api/replies", handleCreateReply).Methods("POST")
+	app.Router.HandleFunc("/api/posts/delete", handleDeletePost).Methods("POST")
 
 	if err := app.Start(); err != nil {
 		log.Fatal("Application start error:", err)

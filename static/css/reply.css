@@ -14,22 +14,25 @@ REPLY
     display: block;
 }
 .show-replies .post-show-hide-replies.minus {
-    display: block;
+    display: inline;
 }
 .show-replies .post-show-hide-replies.plus {
     display: none;
 }
 .reply-wrapper {
-    display: inline-block;
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
 }
 .reply {
-    display: inline-block;
+    display: flex;
+    flex-direction: column;
     background: #F0E0D6;
     font-size: 13px;
     padding: 6px;
     border-bottom: 1px solid #D9BFB7;
     border-right: 1px solid #D9BFB7;
-    vertical-align: top;
+    max-width: calc(100% - 30px);
 }
 .reply.highlight-hover {
     background: #FF9E8A;
@@ -43,9 +46,10 @@ REPLY
 }
 .reply .post-image {
     width: 125px;
+    margin: 4px 0;
 }
 .reply .post-content {
-    padding: 15px 33px;
+    padding: 8px 12px 4px 0;
 }
 .hide-reply .post-show-hide-icons {
     opacity: 0.5;

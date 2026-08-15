@@ -339,8 +339,27 @@ func (app *App) RenderHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Always wrap template context in a root map so fields like .alias are always evaluatable
+	templateData := map[string]interface{}{
+		"alias":     sessionValues["alias"],
+		"privilege": sessionValues["privilege"],
+	}
+
+	if data != nil {
+		if dataMap, ok := data.(map[string]interface{}); ok {
+			for k, v := range dataMap {
+				templateData[k] = v
+			}
+		} else if dataSlice, ok := data.([]map[string]interface{}); ok {
+			templateData["threads"] = dataSlice
+			templateData["data"] = dataSlice
+		} else {
+			templateData["data"] = data
+		}
+	}
+
 	var buf bytes.Buffer
-	if err := app.Templates.ExecuteTemplate(&buf, cfg.Template, data); err != nil {
+	if err := app.Templates.ExecuteTemplate(&buf, cfg.Template, templateData); err != nil {
 		log.Printf("Render error (%s): %v", cfg.Template, err)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)

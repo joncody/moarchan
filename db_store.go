@@ -63,7 +63,7 @@ func InitMoarchanSchema(ctx context.Context, app *frame.App) error {
 func MoarchanDataProvider(ctx context.Context, app *frame.App, cfg frame.RouteConfig, subs []string) (interface{}, error) {
 	topic := resolveSub(cfg.Table, subs)
 	key := resolveSub(cfg.Key, subs)
-	if topic == "" {
+	if topic == "" || topic == "main" {
 		return nil, nil
 	}
 	if key != "" {
@@ -225,5 +225,71 @@ func GetSingleThread(ctx context.Context, db *sql.DB, topic, threadHash string) 
 		"replies":         replies,
 		"taggedBy":        []string{},
 		"tagging":         []string{},
+	}, nil
+}
+
+type DeletedPostInfo struct {
+	Hash     string
+	Topic    string
+	IsThread bool
+	FileName string
+}
+
+func DeletePostOrFile(ctx context.Context, db *sql.DB, hash string, fileOnly bool) (*DeletedPostInfo, error) {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin delete tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	var topic, fileName string
+	var isThread bool
+
+	// 1. Check if the target is a thread OP
+	err = tx.QueryRowContext(ctx, `SELECT topic, COALESCE(file_name, '') FROM threads WHERE hash = $1 FOR UPDATE`, hash).Scan(&topic, &fileName)
+	if err == nil {
+		isThread = true
+	} else if errors.Is(err, sql.ErrNoRows) {
+		// 2. Check if the target is a post reply
+		err = tx.QueryRowContext(ctx, `SELECT topic, COALESCE(file_name, '') FROM posts WHERE hash = $1 FOR UPDATE`, hash).Scan(&topic, &fileName)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, fmt.Errorf("post or thread %q not found", hash)
+			}
+			return nil, fmt.Errorf("query post: %w", err)
+		}
+	} else {
+		return nil, fmt.Errorf("query thread: %w", err)
+	}
+
+	if fileOnly {
+		if isThread {
+			_, err = tx.ExecContext(ctx, `UPDATE threads SET file_name = '', file_mime = '', file_size = '', file_dimensions = '' WHERE hash = $1`, hash)
+		} else {
+			_, err = tx.ExecContext(ctx, `UPDATE posts SET file_name = '', file_mime = '', file_size = '', file_dimensions = '' WHERE hash = $1`, hash)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("clear post file metadata: %w", err)
+		}
+	} else {
+		if isThread {
+			_, err = tx.ExecContext(ctx, `DELETE FROM threads WHERE hash = $1`, hash)
+		} else {
+			_, err = tx.ExecContext(ctx, `DELETE FROM posts WHERE hash = $1`, hash)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("delete post row: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit delete tx: %w", err)
+	}
+
+	return &DeletedPostInfo{
+		Hash:     hash,
+		Topic:    topic,
+		IsThread: isThread,
+		FileName: fileName,
 	}, nil
 }

@@ -141,6 +141,9 @@ func NewApp() (*App, error) {
 		return nil, fmt.Errorf("prepare tables: %w", err)
 	}
 
+	// Initialize distributed PostgreSQL LISTEN / NOTIFY real-time SSE listener
+	app.Hub.InitDBListener(db, dbstring)
+
 	secure := app.AppConfig.SSLPort != "" && app.AppConfig.SSLPort != "0"
 	store, err := NewSessionStore(app.AppConfig.Name, app.AppConfig.HashKey, app.AppConfig.BlockKey, secure)
 	if err != nil {
@@ -203,6 +206,9 @@ func (app *App) Start() error {
 }
 
 func (app *App) Close() error {
+	if app.Hub != nil {
+		app.Hub.Close()
+	}
 	if app.Driver != nil {
 		return app.Driver.Close()
 	}

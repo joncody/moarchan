@@ -38,7 +38,9 @@ TOPIC HEADER
     padding: 9px 0;
 }
 .new-post-container {
-    display: block;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     margin: 9px auto;
     text-align: center;
 }
@@ -49,23 +51,28 @@ TOPIC HEADER
     text-align: center;
 }
 .new-post-form {
-    display: inline-block;
+    display: flex;
+    flex-direction: column;
     margin: 0 auto;
     min-width: 468px;
     text-align: left;
 }
 .new-post-field-row {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 4px;
     margin: 1px 0;
 }
 .new-post-label {
     background: #EA8;
     border: 1px solid #800;
-    display: inline-block;
+    display: flex;
+    align-items: center;
     font-size: 13px;
     font-weight: bold;
     padding: 5px;
     width: 80px;
+    flex-shrink: 0;
 }
 .new-post-input {
     background: #FFF;
@@ -74,7 +81,6 @@ TOPIC HEADER
     font-size: 13px;
     padding: 5px;
     width: 244px;
-    vertical-align: middle;
     outline: 0;
 }
 .new-post-file-input {
@@ -93,19 +99,21 @@ TOPIC HEADER
 .grey-button {
     color: #111;
     cursor: pointer;
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     font-size: 13px;
     background: linear-gradient(#FFF, #DDD);
     border-radius: 3px;
     border: 1px solid #AAA;
     padding: 5px 9px;
-    vertical-align: middle;
 }
 .grey-button:active {
     background: #CCC;
 }
 .blotter-container {
-    display: block;
+    display: flex;
+    flex-direction: column;
     margin: 0 auto;
     width: 468px;
     border-top: 1px solid #808080;
@@ -117,8 +125,9 @@ TOPIC HEADER
     line-height: 1.2;
 }
 .blotter-buttons {
-    display: block;
-    text-align: right;
+    display: flex;
+    justify-content: flex-end;
+    gap: 4px;
     font-size: 11px;
     margin: 3px 0 0 0;
 }
@@ -134,28 +143,28 @@ TOPIC HEADER
     cursor: pointer;
 }
 .top-container {
-    display: block;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     padding: 6px 12px;
     border-top: 1px solid #808080;
     border-bottom: 1px solid #808080;
 }
 .top-container-list {
-    display: inline-block;
+    display: inline-flex;
 }
 .top-link {
-    display: inline-block;
+    display: inline-flex;
     font-size: 13px;
 }
 .search-ops {
     border: 1px solid #CCC;
-    display: inline-block;
+    display: inline-flex;
     background: #FFF;
     padding: 3px;
     font-size: 12px;
-    vertical-align: middle;
 }
 .catalog-link {
-    display: inline-block;
+    display: inline-flex;
     font-size: 13px;
-    vertical-align: middle;
 }

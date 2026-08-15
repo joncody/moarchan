@@ -5,9 +5,14 @@ MAIN
 */
 .header-container {
     position: relative;
+    display: flex;
+    align-items: stretch;
+    width: 100%;
 }
 .box-header {
     display: block;
+    flex: 1 1 100%;
+    width: 100%;
     font-size: 16px;
     font-weight: bold;
     color: #800;
@@ -16,7 +21,7 @@ MAIN
 }
 .box-message {
     color: #111;
-    display: inline-block;
+    display: block;
     padding: 9px;
     font-size: 12px;
     line-height: 18px;
@@ -34,14 +39,12 @@ MAIN
     margin-bottom: 6px;
 }
 .filter-menu-button {
-    position: absolute;
-    right: 3px;
-    top: 0px;
     font-size: 13px;
     color: #800;
     line-height: 20px;
     cursor: pointer;
     font-family: arial;
+    padding: 0 6px;
 }
 #main-latest-posts .filter-menu-button {
     color: #FFF;
@@ -52,15 +55,17 @@ MAIN
 }
 .filter-container {
     position: absolute;
-    display: block;
-    top: 0px;
     right: 0px;
+    top: 0px;
+    bottom: 0px;
+    display: flex;
+    align-items: center;
 }
 .filter-container:hover .filter-menu {
     display: block;
 }
 .filter-menu {
-    position: relative;
+    position: absolute;
     display: none;
     top: 24px;
     right: 0px;
@@ -85,6 +90,15 @@ MAIN
     padding: 3px 21px;
     cursor: pointer;
 }
+#main-boards {
+    display: flex;
+    flex-direction: column;
+}
+#main-boards .topics-container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+}
 #main-boards .filter-menu-item {
     color: #800;
 }
@@ -98,11 +112,12 @@ MAIN
     background: #EFF;
 }
 .topics-list {
-    display: inline-block;
+    display: flex;
+    flex-direction: column;
     box-sizing: border-box;
-    width: 19%;
+    flex: 1 1 18%;
+    min-width: 160px;
     padding: 9px;
-    vertical-align: top;
 }
 .topics-list-header {
     color: #800;
@@ -122,22 +137,28 @@ MAIN
     color: #C00;
     text-decoration: underline;
 }
+.main-columns {
+    display: flex;
+    gap: 1%;
+    width: 100%;
+}
 .right-container {
     box-sizing: border-box;
-    display: inline-block;
-    width: 49.5%;
-    margin-left: 1%;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 49.5%;
 }
 .left-container {
     box-sizing: border-box;
-    display: inline-block;
-    width: 49.5%;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 49.5%;
 }
 .blue-section {
     position: relative;
     box-sizing: border-box;
     display: block;
-    margin: 0 auto 9px;
+    margin: 0 0 9px;
     border: 1px solid #003;
 }
 .blue-header {
@@ -149,7 +170,7 @@ MAIN
     position: relative;
     box-sizing: border-box;
     display: block;
-    margin: 0 auto 9px;
+    margin: 0 0 9px;
     border: 1px solid #030;
 }
 .green-header {
@@ -158,13 +179,15 @@ MAIN
 }
 .main-footer {
     border-top: 1px solid #800;
-    display: block; 
-    text-align: center;
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
     margin-top: 12px;
 }
 .main-footer-item {
     color: #800;
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
     border-left: 1px solid #800;
     border-bottom: 1px solid #800;
     background: #FED;
@@ -173,8 +196,6 @@ MAIN
     cursor: pointer;
 }
 .main-footer-item:last-child {
-    border-left: 1px solid #800;
-    border-bottom: 1px solid #800;
     border-right: 1px solid #800;
 }
 .main-footer-item:hover {
@@ -184,24 +205,58 @@ MAIN
     display: block;
 }
 .lower-footer {
-    display: block;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     margin-top: 30px;
     text-align: center;
     font-size: 11px;
 }
 .lower-footer-list {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
     margin: 0;
     padding: 0;
+    gap: 6px;
 }
 .lower-footer-item {
     color: #00F;
-    display: inline-block;
     text-decoration: underline;
-    margin: 0 3px;
     cursor: pointer;
 }
 .copyright {
-    display: inline-block;
+    display: block;
     color: #800;
     margin: 6px 0 18px;
+}
+.auth-section {
+    max-width: 500px;
+    margin: 20px auto;
+}
+.auth-container {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+.auth-form {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 380px;
+}
+.auth-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 12px;
+}
+.auth-message {
+    margin-top: 10px;
+    font-size: 13px;
+    text-align: center;
+}
+.green-text {
+    color: #008800;
 }

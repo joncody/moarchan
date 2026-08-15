@@ -7,7 +7,8 @@ REPLY BOX
     background: #F0E0D6;
     padding: 3px;
     position: fixed;
-    display: block;
+    display: flex;
+    flex-direction: column;
     z-index: 9999;
     box-shadow: 1px 1px 6px 0 rgba(0,0,0,0.6);
 }
@@ -15,11 +16,13 @@ REPLY BOX
     background: #EA8;
     border: 1px solid #800;
     color: #800;
-    display: block;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     font-size: 12px;
     font-weight: bold;
     line-height: 18px;
-    text-align: center;
+    padding: 0 4px;
     margin-bottom: 1px;
     cursor: grabbing;
     cursor: -webkit-grabbing;
@@ -35,7 +38,6 @@ REPLY BOX
     display: inline-block;
     width: 18px;
     height: 18px;
-    float: right;
     cursor: pointer;
 }
 .reply-box-input {
@@ -68,7 +70,9 @@ REPLY BOX
 }
 .reply-box-buttons {
     color: #000;
-    display: block;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     padding: 2px;
 }
 .reply-box-file {
@@ -76,5 +80,5 @@ REPLY BOX
     font-size: 13px;
 }
 .reply-box-post {
-    float: right;
+    display: inline-block;
 }

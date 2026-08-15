@@ -17,18 +17,6 @@ const VALID_TAGS = new Set([
 
 const eventRegistry = new WeakMap();
 
-function get_global_environment() {
-    if (globalThis !== undefined) {
-        return globalThis;
-    }
-    if (window !== undefined) {
-        return window;
-    }
-    return undefined;
-}
-
-const global_env = get_global_environment();
-
 function objectType(obj) {
     if (obj === null) {
         return "null";
@@ -160,10 +148,10 @@ function dom(selector) {
             if (value === undefined) {
                 return elements.map(function (el) {
                     if (
-                        global_env !== undefined
-                        && typeof global_env.getComputedStyle === "function"
+                        globalThis !== undefined
+                        && typeof globalThis.getComputedStyle === "function"
                     ) {
-                        const computed = global_env.getComputedStyle(el);
+                        const computed = globalThis.getComputedStyle(el);
                         return computed.getPropertyValue(kebabName) || "";
                     }
                     return "";
@@ -210,12 +198,11 @@ function dom(selector) {
             return api;
         },
         get: function (index) {
-            if (
-                typeof index === "number"
-                && index >= 0
-                && index < elements.length
-            ) {
-                return elements[index];
+            if (typeof index === "number") {
+                if (index >= 0 && index < elements.length) {
+                    return elements[index];
+                }
+                return null;
             }
             return Array.from(elements);
         },

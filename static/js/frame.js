@@ -1,15 +1,3 @@
-function getGlobalEnvironment() {
-    if (globalThis !== undefined) {
-        return globalThis;
-    }
-    if (window !== undefined) {
-        return window;
-    }
-    return undefined;
-}
-
-const globalEnv = getGlobalEnvironment();
-
 function createApplication() {
     let activeCleanups = [];
     const controllers = Object.create(null);
@@ -42,12 +30,29 @@ function createApplication() {
 
         event.preventDefault();
         const href = event.currentTarget.dataset.href;
-        if (globalEnv.location.pathname !== href) {
-            globalEnv.history.pushState(null, "", href);
+        if (globalThis.location.pathname !== href) {
+            globalThis.history.pushState(null, "", href);
             if (typeof router.loadRoute === "function") {
                 router.loadRoute(href);
             }
         }
+    }
+
+    function handleLogout(event) {
+        if (event && typeof event.preventDefault === "function") {
+            event.preventDefault();
+        }
+        fetch("/logout", {
+            method: "POST",
+            headers: {
+                "X-Requested-With": "XMLHttpRequest"
+            }
+        }).then(function () {
+            const current = (globalThis !== undefined && globalThis.location ? globalThis.location.pathname : "/");
+            loadRoute(current);
+        }).catch(function (err) {
+            console.error("Logout request error:", err);
+        });
     }
 
     function assignHrefs() {
@@ -59,6 +64,12 @@ function createApplication() {
         const newHrefs = document.querySelectorAll("[data-href]");
         newHrefs.forEach(function (el) {
             el.addEventListener("click", navigate);
+        });
+
+        const logoutBtns = document.querySelectorAll("[data-action='logout']");
+        logoutBtns.forEach(function (el) {
+            el.removeEventListener("click", handleLogout);
+            el.addEventListener("click", handleLogout);
         });
     }
 
@@ -97,7 +108,7 @@ function createApplication() {
                     )
                 ) {
                     const cleanupFn = controllers[name](
-                        globalEnv,
+                        globalThis,
                         msg.template
                     );
                     if (typeof cleanupFn === "function") {
@@ -111,8 +122,8 @@ function createApplication() {
     function loadRoute(targetPath) {
         if (typeof targetPath === "string" && targetPath.length > 0) {
             path = targetPath;
-        } else if (globalEnv !== undefined && globalEnv.location) {
-            path = globalEnv.location.pathname;
+        } else if (globalThis !== undefined && globalThis.location) {
+            path = globalThis.location.pathname;
         }
 
         const endpoint = "/api/render?path=" + encodeURIComponent(path);
@@ -166,14 +177,14 @@ function createApplication() {
     }
 
     function init() {
-        if (globalEnv !== undefined && globalEnv.addEventListener) {
-            globalEnv.addEventListener("popstate", function () {
-                loadRoute(globalEnv.location.pathname);
+        if (globalThis !== undefined && globalThis.addEventListener) {
+            globalThis.addEventListener("popstate", function () {
+                loadRoute(globalThis.location.pathname);
             });
         }
         const initialPath = (
-            globalEnv !== undefined
-            ? globalEnv.location.pathname
+            globalThis !== undefined
+            ? globalThis.location.pathname
             : "/"
         );
         loadRoute(initialPath);
