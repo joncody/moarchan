@@ -256,10 +256,10 @@ func processMultipartUpload(fileHeader *multipart.FileHeader, uniqueID string) (
 func generateUnique() (string, string) {
 	now := time.Now()
 	timestamp := fmt.Sprintf(
-		"%d/%d/%d(%s)%02d:%02d:%02d",
+		"%02d/%02d/%02d(%s)%02d:%02d:%02d",
 		now.Month(),
 		now.Day(),
-		now.Year(),
+		now.Year()%100,
 		now.Weekday().String()[:3],
 		now.Hour(),
 		now.Minute(),
@@ -579,10 +579,10 @@ func main() {
 		log.Fatalf("Failed to initialize moarchan schema: %v", err)
 	}
 
-	// 4. REST Endpoints
-	app.Router.HandleFunc("/api/threads", handleCreateThread).Methods("POST")
-	app.Router.HandleFunc("/api/replies", handleCreateReply).Methods("POST")
-	app.Router.HandleFunc("/api/posts/delete", handleDeletePost).Methods("POST")
+	// 4. REST Endpoints (Go 1.22+ Native Method Routing)
+	app.Router.HandleFunc("POST /api/threads", handleCreateThread)
+	app.Router.HandleFunc("POST /api/replies", handleCreateReply)
+	app.Router.HandleFunc("POST /api/posts/delete", handleDeletePost)
 
 	if err := app.Start(); err != nil {
 		log.Fatal("Application start error:", err)

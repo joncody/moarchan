@@ -16,8 +16,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gorilla/mux"
-	"github.com/gorilla/sessions"
 	_ "github.com/lib/pq"
 )
 
@@ -39,13 +37,13 @@ type AppConfig struct {
 
 type App struct {
 	AppConfig
-	SessionStore   sessions.Store
+	SessionStore   *SessionStore
 	Templates      *template.Template
 	Driver         *sql.DB
 	Added          []AddedRoute
 	Routes         []Route
 	CompiledRoutes []CompiledRoute
-	Router         *mux.Router
+	Router         *http.ServeMux
 	Hub            *SSEHub
 	DataProvider   DataProvider
 	knownTables    sync.Map
@@ -172,10 +170,16 @@ func (app *App) Start() error {
 		return fmt.Errorf("compile routes on start: %w", err)
 	}
 
+	// Wrap native http.ServeMux with middleware pipeline
+	var handler http.Handler = app.Router
+	handler = SecurityHeadersMiddleware(handler)
+	handler = LoggingMiddleware(handler)
+	handler = RecoveryMiddleware(handler)
+
 	addr := ":" + app.AppConfig.Port
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           app.Router,
+		Handler:           handler,
 		ReadTimeout:       15 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
 		WriteTimeout:      0,

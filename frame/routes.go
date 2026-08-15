@@ -14,8 +14,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/gorilla/mux"
 )
 
 var (
@@ -161,24 +159,20 @@ func (app *App) CompileRoutes() error {
 	return nil
 }
 
-func (app *App) SetupRoutes() (*mux.Router, error) {
-	router := mux.NewRouter().StrictSlash(false)
+func (app *App) SetupRoutes() (*http.ServeMux, error) {
+	mux := http.NewServeMux()
 
-	router.Use(RecoveryMiddleware)
-	router.Use(LoggingMiddleware)
-	router.Use(SecurityHeadersMiddleware)
+	mux.HandleFunc("POST /login", app.Login)
+	mux.HandleFunc("POST /register", app.Register)
+	mux.HandleFunc("POST /logout", app.Logout)
 
-	router.HandleFunc("/login", app.Login).Methods("POST")
-	router.HandleFunc("/register", app.Register).Methods("POST")
-	router.HandleFunc("/logout", app.Logout).Methods("POST")
+	mux.HandleFunc("GET /api/render", app.RenderHandler)
+	mux.HandleFunc("GET /api/stream", app.SSEHandler)
 
-	router.HandleFunc("/api/render", app.RenderHandler).Methods("GET")
-	router.HandleFunc("/api/stream", app.SSEHandler).Methods("GET")
+	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static/"))))
+	mux.HandleFunc("GET /", app.baseHandler)
 
-	router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("./static/"))))
-	router.PathPrefix("/").HandlerFunc(app.baseHandler).Methods("GET")
-
-	return router, nil
+	return mux, nil
 }
 
 func (app *App) AddRoute(pattern string, handler func(app *App, w http.ResponseWriter, r *http.Request, matches []string)) error {
@@ -339,7 +333,6 @@ func (app *App) RenderHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Always wrap template context in a root map so fields like .alias are always evaluatable
 	templateData := map[string]interface{}{
 		"alias":     sessionValues["alias"],
 		"privilege": sessionValues["privilege"],

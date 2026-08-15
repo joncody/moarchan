@@ -13,6 +13,10 @@
                     <button id="new-post-button" class="new-post-button grey-button" name="new-post-button" type="button">Post</button>
                 </div>
                 <div class="new-post-field-row">
+                    <label class="new-post-label" for="new-post-password">Password</label>
+                    <input id="new-post-password" class="new-post-input" type="password" name="password" placeholder="Deletion password" />
+                </div>
+                <div class="new-post-field-row">
                     <label class="new-post-label" for="new-post-comment">Comment</label>
                     <textarea id="new-post-comment" class="new-post-input" rows="auto" cols="auto"></textarea>
                 </div>
@@ -43,8 +47,9 @@
         <div class="bottom-container">
             <div class="bottom-right-side">
                 Delete Post: [
-                <input class="file-only" type="checkbox" name="file-only">
-                File Only]
+                <input class="file-only" type="checkbox" name="file-only" id="delete-file-only">
+                <label for="delete-file-only">File Only</label>]
+                <input type="password" id="delete-post-password" placeholder="Password" class="new-post-input" style="width: 100px; padding: 2px 4px;">
                 <button class="delete grey-button" type="button" name="delete">Delete</button>
                 Style:
                 <select class="select-style grey-button" name="style">

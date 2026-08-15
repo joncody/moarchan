@@ -41,6 +41,8 @@ POST
     gap: 4px;
     font-size: 13px;
 }
+
+/* OP Body: Row when collapsed (thumbnail on left, header + comment on right) */
 .post-body {
     display: flex;
     flex-direction: row;
@@ -48,15 +50,24 @@ POST
     gap: 12px;
     margin-bottom: 6px;
 }
+
+/* OP Body: Column when expanded (image on top, header + comment on newline underneath) */
+.post-body:has(.post-image.expanded),
+.post-body.has-expanded {
+    flex-direction: column;
+}
+
 .post-body .post-image-container {
     flex-shrink: 0;
 }
+
 .post-details {
     display: flex;
     flex-direction: column;
     flex: 1 1 auto;
     min-width: 0;
 }
+
 .post-image-container {
     display: block;
     cursor: pointer;

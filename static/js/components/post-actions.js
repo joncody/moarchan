@@ -23,13 +23,16 @@ export default function createPostActions(global, options) {
 
         const fullSrc = img.getAttribute("data-full") || container.attr("href")[0];
         const thumbSrc = img.getAttribute("data-thumb") || img.src;
+        const parentBody = container.parents();
 
         if (img.classList.contains("expanded")) {
             img.classList.remove("expanded");
             img.src = thumbSrc;
+            parentBody.removeClass("has-expanded");
         } else {
             img.classList.add("expanded");
             img.src = fullSrc;
+            parentBody.addClass("has-expanded");
         }
     }
 

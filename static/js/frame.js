@@ -18,6 +18,95 @@ function createApplication() {
         activeCleanups = [];
     }
 
+    function handleRenderSuccess(msg) {
+        runCleanups();
+
+        const base = document.querySelector("[data-base]");
+        if (base !== null) {
+            base.innerHTML = msg.template;
+        }
+
+        assignHrefs();
+
+        if (Array.isArray(msg.controllers)) {
+            msg.controllers.forEach(function (name) {
+                if (
+                    Object.prototype.hasOwnProperty.call(
+                        controllers,
+                        name
+                    )
+                ) {
+                    const cleanupFn = controllers[name](
+                        globalThis,
+                        msg.template
+                    );
+                    if (typeof cleanupFn === "function") {
+                        activeCleanups.push(cleanupFn);
+                    }
+                }
+            });
+        }
+    }
+
+    function renderError(message) {
+        const base = document.querySelector("[data-base]");
+        if (base === null) {
+            return;
+        }
+        const safeMsg = message || "An unexpected error occurred.";
+        base.innerHTML = (
+            "<div class=\"page\"><div class=\"pink-section\">" +
+            "<h3 class=\"box-header pink-header\">Error</h3>" +
+            "<p class=\"box-message\">" +
+            safeMsg +
+            "</p></div></div>"
+        );
+        assignHrefs();
+    }
+
+    function loadRoute(targetPath) {
+        if (typeof targetPath === "string" && targetPath.length > 0) {
+            path = targetPath;
+            if (
+                globalThis !== undefined &&
+                globalThis.history &&
+                globalThis.location &&
+                globalThis.location.pathname !== targetPath
+            ) {
+                globalThis.history.pushState(null, "", targetPath);
+            }
+        } else if (globalThis !== undefined && globalThis.location) {
+            path = globalThis.location.pathname;
+        }
+
+        const endpoint = "/api/render?path=" + encodeURIComponent(path);
+
+        fetch(endpoint, {
+            headers: {
+                "X-Requested-With": "XMLHttpRequest"
+            }
+        }).then(function (response) {
+            if (!response.ok) {
+                return response.json().then(function (errData) {
+                    const msg = errData.error || (
+                        "Error " + response.status
+                    );
+                    throw new Error(msg);
+                }).catch(function () {
+                    throw new Error("Error " + response.status);
+                });
+            }
+            return response.json();
+        }).then(function (msg) {
+            handleRenderSuccess(msg);
+        }).catch(function (err) {
+            runCleanups();
+            renderError(err.message);
+        });
+    }
+
+    router.loadRoute = loadRoute;
+
     function navigate(event) {
         if (
             event === undefined ||
@@ -30,12 +119,7 @@ function createApplication() {
 
         event.preventDefault();
         const href = event.currentTarget.dataset.href;
-        if (globalThis.location.pathname !== href) {
-            globalThis.history.pushState(null, "", href);
-            if (typeof router.loadRoute === "function") {
-                router.loadRoute(href);
-            }
-        }
+        loadRoute(href);
     }
 
     function handleLogout(event) {
@@ -72,87 +156,6 @@ function createApplication() {
             el.addEventListener("click", handleLogout);
         });
     }
-
-    function renderError(message) {
-        const base = document.querySelector("[data-base]");
-        if (base === null) {
-            return;
-        }
-        const safeMsg = message || "An unexpected error occurred.";
-        base.innerHTML = (
-            "<div class=\"page\"><div class=\"pink-section\">" +
-            "<h3 class=\"box-header pink-header\">Error</h3>" +
-            "<p class=\"box-message\">" +
-            safeMsg +
-            "</p></div></div>"
-        );
-        assignHrefs();
-    }
-
-    function handleRenderSuccess(msg) {
-        runCleanups();
-
-        const base = document.querySelector("[data-base]");
-        if (base !== null) {
-            base.innerHTML = msg.template;
-        }
-
-        assignHrefs();
-
-        if (Array.isArray(msg.controllers)) {
-            msg.controllers.forEach(function (name) {
-                if (
-                    Object.prototype.hasOwnProperty.call(
-                        controllers,
-                        name
-                    )
-                ) {
-                    const cleanupFn = controllers[name](
-                        globalThis,
-                        msg.template
-                    );
-                    if (typeof cleanupFn === "function") {
-                        activeCleanups.push(cleanupFn);
-                    }
-                }
-            });
-        }
-    }
-
-    function loadRoute(targetPath) {
-        if (typeof targetPath === "string" && targetPath.length > 0) {
-            path = targetPath;
-        } else if (globalThis !== undefined && globalThis.location) {
-            path = globalThis.location.pathname;
-        }
-
-        const endpoint = "/api/render?path=" + encodeURIComponent(path);
-
-        fetch(endpoint, {
-            headers: {
-                "X-Requested-With": "XMLHttpRequest"
-            }
-        }).then(function (response) {
-            if (!response.ok) {
-                return response.json().then(function (errData) {
-                    const msg = errData.error || (
-                        "Error " + response.status
-                    );
-                    throw new Error(msg);
-                }).catch(function () {
-                    throw new Error("Error " + response.status);
-                });
-            }
-            return response.json();
-        }).then(function (msg) {
-            handleRenderSuccess(msg);
-        }).catch(function (err) {
-            runCleanups();
-            renderError(err.message);
-        });
-    }
-
-    router.loadRoute = loadRoute;
 
     function subscribeToStream(topic, handlers) {
         const url = "/api/stream?topic=" + encodeURIComponent(topic);
