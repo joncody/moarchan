@@ -20,7 +20,6 @@ export default function createPostActions(global, options) {
         if (!img) {
             return;
         }
-
         const fullSrc = img.getAttribute("data-full") || container.attr("href")[0];
         const thumbSrc = img.getAttribute("data-thumb") || img.src;
         const parentBody = container.parents();
@@ -117,7 +116,6 @@ export default function createPostActions(global, options) {
         const menu = dom("#post-menu-" + hash);
         dom(".post-options-menu").addClass("hide");
         menu.removeClass("hide");
-
         setTimeout(function () {
             dom(document.body).once("click", function (evt) {
                 if (!dom(evt.target).hasClass("post-options-arrow")) {
@@ -135,7 +133,6 @@ export default function createPostActions(global, options) {
         const threadVal = target.data("thread");
         const threadId = Array.isArray(threadVal) ? threadVal[0] : threadVal;
         const postHash = target.text()[0] || "";
-
         if (typeof onReplyClick === "function") {
             onReplyClick(threadId, postHash);
         }
@@ -208,8 +205,13 @@ export default function createPostActions(global, options) {
                 if (fileOnly) {
                     fd.append("file_only", "true");
                 }
-
-                fetch("/api/posts/delete", { method: "POST", body: fd })
+                fetch("/api/posts/delete", {
+                    method: "POST",
+                    body: fd,
+                    headers: {
+                        "X-CSRF-Token": frame.getCSRFToken()
+                    }
+                })
                     .then(function (res) {
                         if (!res.ok) {
                             return res.text().then(function (t) { global.alert(t); });

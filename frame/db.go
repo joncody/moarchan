@@ -34,34 +34,32 @@ func (app *App) EnsureTable(ctx context.Context, table string) error {
 	if _, loaded := app.knownTables.Load(table); loaded {
 		return nil
 	}
-
 	if !IsValidTableName(table) {
 		return fmt.Errorf("invalid table name: %q", table)
 	}
 
 	const queryTemplate = `
-		CREATE TABLE IF NOT EXISTS "%s" (
-			id BIGSERIAL PRIMARY KEY,
-			key TEXT UNIQUE NOT NULL,
-			value JSONB
-		)`
+CREATE TABLE IF NOT EXISTS "%s" (
+	id BIGSERIAL PRIMARY KEY,
+	key TEXT UNIQUE NOT NULL,
+	value JSONB
+)`
 	query := fmt.Sprintf(queryTemplate, table)
 	if _, err := app.Driver.ExecContext(ctx, query); err != nil {
 		return fmt.Errorf("ensure table %q: %w", table, err)
 	}
-
 	app.knownTables.Store(table, true)
 	return nil
 }
 
 func (app *App) PrepareTables(ctx context.Context) error {
 	const initSchema = `
-		CREATE TABLE IF NOT EXISTS auth (
-			id BIGSERIAL PRIMARY KEY,
-			key TEXT UNIQUE NOT NULL,
-			value JSONB
-		);
-	`
+CREATE TABLE IF NOT EXISTS auth (
+	id BIGSERIAL PRIMARY KEY,
+	key TEXT UNIQUE NOT NULL,
+	value JSONB
+);
+`
 	if _, err := app.Driver.ExecContext(ctx, initSchema); err != nil {
 		return fmt.Errorf("prepare frame base database schema: %w", err)
 	}
@@ -91,6 +89,16 @@ func (app *App) ExecTx(ctx context.Context, fn func(*sql.Tx) error) error {
 	return tx.Commit()
 }
 
+// GetRow retrieves a single JSONB document by key from the specified table.
+//
+// SECURITY INVARIANT: The `table` parameter is interpolated into the SQL
+// query via fmt.Sprintf. This is safe ONLY because:
+//   1. IsValidTableName() enforces ^[a-zA-Z0-9_]+$ before any query is built.
+//   2. IsSystemTable() blocks access to pg_*, information_schema, and auth.
+//   3. All public entry points (EnsureTable, GetRow, InsertRow, etc.) call
+//      IsValidTableName() as their first operation.
+//
+// Do NOT add new code paths that accept a table name without validation.
 func (app *App) GetRow(ctx context.Context, table, key string) (map[string]interface{}, error) {
 	if err := app.EnsureTable(ctx, table); err != nil {
 		return nil, err
@@ -144,7 +152,6 @@ func (app *App) GetRowsPaginated(ctx context.Context, table string, limit, offse
 	if offset < 0 {
 		offset = 0
 	}
-
 	query := fmt.Sprintf(`SELECT value FROM "%s" ORDER BY id DESC LIMIT $1 OFFSET $2`, table)
 	rows, err := app.Driver.QueryContext(ctx, query, limit, offset)
 	if err != nil {
@@ -188,11 +195,10 @@ func (app *App) InsertRow(ctx context.Context, table, key string, value interfac
 		}
 	}
 	query := fmt.Sprintf(`
-		INSERT INTO "%s" (key, value)
-		VALUES ($1, $2)
-		ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+INSERT INTO "%s" (key, value)
+VALUES ($1, $2)
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
 		table)
-
 	if _, err := app.Driver.ExecContext(ctx, query, key, data); err != nil {
 		return fmt.Errorf("upsert into %q (key=%q): %w", table, key, err)
 	}

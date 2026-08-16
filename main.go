@@ -14,7 +14,6 @@ import (
 	"log"
 	"mime/multipart"
 	"net/http"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -22,10 +21,13 @@ import (
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
+	xdraw "golang.org/x/image/draw"
+
 	"moarchan/frame"
 )
 
 var app *frame.App
+
 var tagRegex = regexp.MustCompile(`&gt;&gt;([A-Za-z0-9]+)`)
 
 const (
@@ -88,21 +90,23 @@ func sanitizeComment(raw string) (string, []string) {
 			tags = append(tags, postHash)
 			return fmt.Sprintf(`<span class="post-tag blue-text-link" data-tag="%s">%s</span>`, postHash, match)
 		})
-
 		if strings.HasPrefix(formattedLine, "&gt;") && !strings.HasPrefix(formattedLine, "&gt;&gt;") {
 			formattedLine = fmt.Sprintf(`<span class="post-quote">%s</span>`, formattedLine)
 		}
-
 		formattedLines = append(formattedLines, formattedLine)
 	}
 
 	return strings.Join(formattedLines, "<br />"), tags
 }
 
+// createThumbnail scales the source image to fit within maxW x maxH using
+// bilinear interpolation (ApproxBiLinear) for significantly better quality
+// than nearest-neighbor sampling, with minimal CPU overhead.
 func createThumbnail(src image.Image, maxW, maxH int) image.Image {
 	bounds := src.Bounds()
 	w := bounds.Dx()
 	h := bounds.Dy()
+
 	if w <= maxW && h <= maxH {
 		return src
 	}
@@ -124,23 +128,11 @@ func createThumbnail(src image.Image, maxW, maxH int) image.Image {
 	}
 
 	dst := image.NewRGBA(image.Rect(0, 0, newW, newH))
-	for y := 0; y < newH; y++ {
-		for x := 0; x < newW; x++ {
-			srcX := int(float64(x) / scale)
-			srcY := int(float64(y) / scale)
-			if srcX >= w {
-				srcX = w - 1
-			}
-			if srcY >= h {
-				srcY = h - 1
-			}
-			dst.Set(x, y, src.At(bounds.Min.X+srcX, bounds.Min.Y+srcY))
-		}
-	}
+	xdraw.ApproxBiLinear.Scale(dst, dst.Bounds(), src, src.Bounds(), xdraw.Over, nil)
 	return dst
 }
 
-func processMultipartUpload(fileHeader *multipart.FileHeader, uniqueID string) (*FileDetails, error) {
+func processMultipartUpload(ctx context.Context, fileHeader *multipart.FileHeader, uniqueID string) (*FileDetails, error) {
 	if fileHeader == nil {
 		return &FileDetails{}, nil
 	}
@@ -166,7 +158,6 @@ func processMultipartUpload(fileHeader *multipart.FileHeader, uniqueID string) (
 	if err != nil {
 		return nil, fmt.Errorf("invalid or corrupted image binary: %w", err)
 	}
-
 	if config.Width > MaxImageDimension || config.Height > MaxImageDimension {
 		return nil, fmt.Errorf("image dimensions (%dx%d) exceed maximum %dpx", config.Width, config.Height, MaxImageDimension)
 	}
@@ -180,76 +171,71 @@ func processMultipartUpload(fileHeader *multipart.FileHeader, uniqueID string) (
 		baseName = "upload" + ext
 	}
 	safeName := fmt.Sprintf("%s_%s", uniqueID, baseName)
-	savePath := fmt.Sprintf("./static/images/uploads/%s", safeName)
-	thumbPath := fmt.Sprintf("./static/images/uploads/thumb_%s", safeName)
-
-	if err := os.MkdirAll("./static/images/uploads", 0755); err != nil {
-		return nil, fmt.Errorf("create uploads directory: %w", err)
-	}
-
-	out, err := os.OpenFile(savePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
-	if err != nil {
-		return nil, fmt.Errorf("create destination file: %w", err)
-	}
-	defer out.Close()
-
-	thumbOut, err := os.OpenFile(thumbPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
-	if err != nil {
-		return nil, fmt.Errorf("create thumbnail destination file: %w", err)
-	}
-	defer thumbOut.Close()
+	thumbName := "thumb_" + safeName
 
 	// Re-encode image binary to strip metadata and generate scaled thumbnail
+	var imgData bytes.Buffer
+	var thumbData bytes.Buffer
+
 	switch format {
 	case "jpeg":
 		img, err := jpeg.Decode(file)
 		if err != nil {
 			return nil, fmt.Errorf("decode jpeg binary: %w", err)
 		}
-		if err := jpeg.Encode(out, img, &jpeg.Options{Quality: 90}); err != nil {
+		if err := jpeg.Encode(&imgData, img, &jpeg.Options{Quality: 90}); err != nil {
 			return nil, fmt.Errorf("re-encode jpeg: %w", err)
 		}
 		thumbImg := createThumbnail(img, 250, 250)
-		_ = jpeg.Encode(thumbOut, thumbImg, &jpeg.Options{Quality: 85})
-
+		if err := jpeg.Encode(&thumbData, thumbImg, &jpeg.Options{Quality: 85}); err != nil {
+			return nil, fmt.Errorf("encode jpeg thumbnail: %w", err)
+		}
 	case "png":
 		img, err := png.Decode(file)
 		if err != nil {
 			return nil, fmt.Errorf("decode png binary: %w", err)
 		}
-		if err := png.Encode(out, img); err != nil {
+		if err := png.Encode(&imgData, img); err != nil {
 			return nil, fmt.Errorf("re-encode png: %w", err)
 		}
 		thumbImg := createThumbnail(img, 250, 250)
-		_ = png.Encode(thumbOut, thumbImg)
-
+		if err := png.Encode(&thumbData, thumbImg); err != nil {
+			return nil, fmt.Errorf("encode png thumbnail: %w", err)
+		}
 	case "gif":
 		gifImg, err := gif.DecodeAll(file)
 		if err != nil {
 			return nil, fmt.Errorf("decode gif binary: %w", err)
 		}
-		if err := gif.EncodeAll(out, gifImg); err != nil {
+		if err := gif.EncodeAll(&imgData, gifImg); err != nil {
 			return nil, fmt.Errorf("re-encode gif: %w", err)
 		}
 		if len(gifImg.Image) > 0 {
 			thumbImg := createThumbnail(gifImg.Image[0], 250, 250)
-			_ = jpeg.Encode(thumbOut, thumbImg, &jpeg.Options{Quality: 85})
+			if err := jpeg.Encode(&thumbData, thumbImg, &jpeg.Options{Quality: 85}); err != nil {
+				return nil, fmt.Errorf("encode gif thumbnail: %w", err)
+			}
 		}
-
 	default:
 		return nil, fmt.Errorf("unsupported image format %q", format)
 	}
 
-	fileInfo, err := out.Stat()
-	if err != nil {
-		return nil, fmt.Errorf("stat destination file: %w", err)
+	// Persist via Storage abstraction (local disk or S3-compatible)
+	if err := app.Storage.Save(ctx, safeName, bytes.NewReader(imgData.Bytes())); err != nil {
+		return nil, fmt.Errorf("save image to storage: %w", err)
+	}
+	if thumbData.Len() > 0 {
+		if err := app.Storage.Save(ctx, thumbName, bytes.NewReader(thumbData.Bytes())); err != nil {
+			_ = app.Storage.Delete(ctx, safeName)
+			return nil, fmt.Errorf("save thumbnail to storage: %w", err)
+		}
 	}
 
 	return &FileDetails{
 		Name:       safeName,
-		Path:       savePath,
+		Path:       app.Storage.PublicURL(safeName),
 		Mime:       "image/" + format,
-		Size:       fmt.Sprintf("%.1f", float64(fileInfo.Size())/1024.0),
+		Size:       fmt.Sprintf("%.1f", float64(imgData.Len())/1024.0),
 		Dimensions: fmt.Sprintf("%dx%d", config.Width, config.Height),
 	}, nil
 }
@@ -307,7 +293,7 @@ func handleCreateThread(w http.ResponseWriter, r *http.Request) {
 	}
 
 	timestamp, hash := generateUnique()
-	fileDetails, err := processMultipartUpload(fileHeader, hash)
+	fileDetails, err := processMultipartUpload(r.Context(), fileHeader, hash)
 	if err != nil {
 		log.Println("File upload error:", err)
 		http.Error(w, fmt.Sprintf("File upload failed: %v", err), http.StatusBadRequest)
@@ -326,9 +312,9 @@ func handleCreateThread(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	const insertQuery = `
-		INSERT INTO threads (hash, topic, name, subject, options, password_hash, comment, file_name, file_mime, file_size, file_dimensions, timestamp)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-	`
+INSERT INTO threads (hash, topic, name, subject, options, password_hash, comment, file_name, file_mime, file_size, file_dimensions, timestamp)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+`
 	_, err = app.Driver.ExecContext(ctx, insertQuery,
 		hash, topic, name, subject, rawOpt, passHash, comment,
 		fileDetails.Name, fileDetails.Mime, fileDetails.Size, fileDetails.Dimensions, timestamp,
@@ -406,7 +392,7 @@ func handleCreateReply(w http.ResponseWriter, r *http.Request) {
 	}
 
 	timestamp, hash := generateUnique()
-	fileDetails, err := processMultipartUpload(fileHeader, hash)
+	fileDetails, err := processMultipartUpload(r.Context(), fileHeader, hash)
 	if err != nil {
 		log.Println("File upload error:", err)
 		http.Error(w, fmt.Sprintf("File upload failed: %v", err), http.StatusBadRequest)
@@ -440,9 +426,9 @@ func handleCreateReply(w http.ResponseWriter, r *http.Request) {
 	taggedByJSON, _ := json.Marshal([]string{})
 
 	const insertPostQuery = `
-		INSERT INTO posts (hash, thread_hash, topic, name, options, password_hash, comment, file_name, file_mime, file_size, file_dimensions, timestamp, tagging, tagged_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-	`
+INSERT INTO posts (hash, thread_hash, topic, name, options, password_hash, comment, file_name, file_mime, file_size, file_dimensions, timestamp, tagging, tagged_by)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+`
 	_, err = tx.ExecContext(ctx, insertPostQuery,
 		hash, threadHash, topic, name, rawOpt, passHash, comment,
 		fileDetails.Name, fileDetails.Mime, fileDetails.Size, fileDetails.Dimensions, timestamp,
@@ -523,11 +509,15 @@ func handleDeletePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Remove corresponding image files from disk
+	// Remove corresponding image files from storage
 	for _, fn := range info.FileNames {
 		if fn != "" {
-			_ = os.Remove(fmt.Sprintf("./static/images/uploads/%s", fn))
-			_ = os.Remove(fmt.Sprintf("./static/images/uploads/thumb_%s", fn))
+			if err := app.Storage.Delete(ctx, fn); err != nil {
+				log.Printf("Failed to delete file %q from storage: %v", fn, err)
+			}
+			if err := app.Storage.Delete(ctx, "thumb_"+fn); err != nil {
+				log.Printf("Failed to delete thumbnail %q from storage: %v", fn, err)
+			}
 		}
 	}
 
@@ -575,7 +565,6 @@ func ResolveAndRenderEvent(ctx context.Context, a *frame.App, topic, event strin
 			threadData["html"] = buf.String()
 		}
 		return json.Marshal(threadData)
-
 	case "new-reply":
 		replyData, err := GetSinglePost(ctx, a.Driver, hash)
 		if err != nil {
@@ -587,7 +576,6 @@ func ResolveAndRenderEvent(ctx context.Context, a *frame.App, topic, event strin
 		}
 		return json.Marshal(replyData)
 	}
-
 	return rawData, nil
 }
 
@@ -630,10 +618,10 @@ func main() {
 	// 2. Application Data Resolver Hook
 	app.DataProvider = MoarchanDataProvider
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// 3. Database Schema Initialization
+	// 3. Database Schema Initialization (versioned migrations)
 	if err := InitMoarchanSchema(ctx, app); err != nil {
 		log.Fatalf("Failed to initialize moarchan schema: %v", err)
 	}

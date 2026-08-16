@@ -8,79 +8,127 @@ import (
 	"fmt"
 
 	"moarchan/frame"
+
 	"golang.org/x/crypto/bcrypt"
 )
 
+// InitMoarchanSchema applies all domain schema migrations using the
+// versioned migration system. Each migration runs exactly once and is
+// recorded in the schema_migrations table, preventing the fragile
+// re-execution of UPDATE backfills on every startup.
 func InitMoarchanSchema(ctx context.Context, app *frame.App) error {
-	const query = `
-		CREATE TABLE IF NOT EXISTS boards (
-			id BIGSERIAL PRIMARY KEY,
-			slug TEXT UNIQUE NOT NULL
-		);
-
-		CREATE TABLE IF NOT EXISTS threads (
-			id BIGSERIAL PRIMARY KEY,
-			hash TEXT UNIQUE NOT NULL,
-			topic TEXT NOT NULL,
-			name TEXT NOT NULL,
-			subject TEXT,
-			options TEXT,
-			password_hash TEXT,
-			comment TEXT NOT NULL,
-			file_name TEXT NOT NULL,
-			file_mime TEXT NOT NULL,
-			file_size TEXT NOT NULL,
-			file_dimensions TEXT NOT NULL,
-			timestamp TEXT NOT NULL,
-			bumped_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-			created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-		);
-
-		-- Safe non-destructive migrations for existing tables
-		ALTER TABLE threads ADD COLUMN IF NOT EXISTS password_hash TEXT;
-		ALTER TABLE threads ADD COLUMN IF NOT EXISTS bumped_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
-
-		-- Backfill bumped_at from created_at for any legacy threads
-		UPDATE threads SET bumped_at = created_at WHERE bumped_at IS NULL;
-
-		CREATE TABLE IF NOT EXISTS posts (
-			id BIGSERIAL PRIMARY KEY,
-			hash TEXT UNIQUE NOT NULL,
-			thread_hash TEXT NOT NULL REFERENCES threads(hash) ON DELETE CASCADE,
-			topic TEXT NOT NULL,
-			name TEXT NOT NULL,
-			options TEXT,
-			password_hash TEXT,
-			comment TEXT NOT NULL,
-			file_name TEXT,
-			file_mime TEXT,
-			file_size TEXT,
-			file_dimensions TEXT,
-			timestamp TEXT NOT NULL,
-			tagging JSONB DEFAULT '[]'::jsonb,
-			tagged_by JSONB DEFAULT '[]'::jsonb,
-			created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-		);
-
-		-- Safe non-destructive migration for posts table
-		ALTER TABLE posts ADD COLUMN IF NOT EXISTS password_hash TEXT;
-
-		-- Indexes
-		CREATE INDEX IF NOT EXISTS idx_threads_topic_bumped ON threads(topic, bumped_at DESC);
-		CREATE INDEX IF NOT EXISTS idx_posts_thread_hash ON posts(thread_hash);
-	`
-	if _, err := app.Driver.ExecContext(ctx, query); err != nil {
-		return fmt.Errorf("init moarchan schema: %w", err)
+	// Migration 001: Create boards table
+	if err := app.RunMigration(ctx, "001_create_boards", "Create boards table", func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `
+CREATE TABLE IF NOT EXISTS boards (
+	id BIGSERIAL PRIMARY KEY,
+	slug TEXT UNIQUE NOT NULL
+);`)
+		return err
+	}); err != nil {
+		return fmt.Errorf("migration 001: %w", err)
 	}
+
+	// Migration 002: Create threads table
+	if err := app.RunMigration(ctx, "002_create_threads", "Create threads table", func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `
+CREATE TABLE IF NOT EXISTS threads (
+	id BIGSERIAL PRIMARY KEY,
+	hash TEXT UNIQUE NOT NULL,
+	topic TEXT NOT NULL,
+	name TEXT NOT NULL,
+	subject TEXT,
+	options TEXT,
+	password_hash TEXT,
+	comment TEXT NOT NULL,
+	file_name TEXT NOT NULL,
+	file_mime TEXT NOT NULL,
+	file_size TEXT NOT NULL,
+	file_dimensions TEXT NOT NULL,
+	timestamp TEXT NOT NULL,
+	bumped_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);`)
+		return err
+	}); err != nil {
+		return fmt.Errorf("migration 002: %w", err)
+	}
+
+	// Migration 003: Create posts table
+	if err := app.RunMigration(ctx, "003_create_posts", "Create posts table", func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `
+CREATE TABLE IF NOT EXISTS posts (
+	id BIGSERIAL PRIMARY KEY,
+	hash TEXT UNIQUE NOT NULL,
+	thread_hash TEXT NOT NULL REFERENCES threads(hash) ON DELETE CASCADE,
+	topic TEXT NOT NULL,
+	name TEXT NOT NULL,
+	options TEXT,
+	password_hash TEXT,
+	comment TEXT NOT NULL,
+	file_name TEXT,
+	file_mime TEXT,
+	file_size TEXT,
+	file_dimensions TEXT,
+	timestamp TEXT NOT NULL,
+	tagging JSONB DEFAULT '[]'::jsonb,
+	tagged_by JSONB DEFAULT '[]'::jsonb,
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);`)
+		return err
+	}); err != nil {
+		return fmt.Errorf("migration 003: %w", err)
+	}
+
+	// Migration 004: Add password_hash to threads (non-destructive)
+	if err := app.RunMigration(ctx, "004_threads_password_hash", "Add password_hash column to threads", func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `ALTER TABLE threads ADD COLUMN IF NOT EXISTS password_hash TEXT;`)
+		return err
+	}); err != nil {
+		return fmt.Errorf("migration 004: %w", err)
+	}
+
+	// Migration 005: Add bumped_at to threads and backfill
+	if err := app.RunMigration(ctx, "005_threads_bumped_at", "Add bumped_at column and backfill from created_at", func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `ALTER TABLE threads ADD COLUMN IF NOT EXISTS bumped_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;`); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, `UPDATE threads SET bumped_at = created_at WHERE bumped_at IS NULL;`)
+		return err
+	}); err != nil {
+		return fmt.Errorf("migration 005: %w", err)
+	}
+
+	// Migration 006: Add password_hash to posts (non-destructive)
+	if err := app.RunMigration(ctx, "006_posts_password_hash", "Add password_hash column to posts", func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `ALTER TABLE posts ADD COLUMN IF NOT EXISTS password_hash TEXT;`)
+		return err
+	}); err != nil {
+		return fmt.Errorf("migration 006: %w", err)
+	}
+
+	// Migration 007: Create indexes
+	if err := app.RunMigration(ctx, "007_create_indexes", "Create performance indexes", func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_threads_topic_bumped ON threads(topic, bumped_at DESC);`); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_posts_thread_hash ON posts(thread_hash);`)
+		return err
+	}); err != nil {
+		return fmt.Errorf("migration 007: %w", err)
+	}
+
 	return nil
 }
 
 func MoarchanDataProvider(ctx context.Context, app *frame.App, cfg frame.RouteConfig, subs []string) (interface{}, error) {
 	topic := resolveSub(cfg.Table, subs)
 	key := resolveSub(cfg.Key, subs)
+
 	if topic == "" || topic == "main" {
 		return nil, nil
 	}
+
 	if key != "" {
 		return GetSingleThread(ctx, app.Driver, topic, key)
 	}
@@ -99,36 +147,36 @@ func resolveSub(field string, subs []string) string {
 
 func GetTopicThreads(ctx context.Context, db *sql.DB, topic string) ([]map[string]interface{}, error) {
 	const query = `
-		SELECT 
-			t.hash, t.topic, t.name, COALESCE(t.subject, ''), COALESCE(t.options, ''), t.comment,
-			t.file_name, t.file_mime, t.file_size, t.file_dimensions, t.timestamp,
-			COALESCE(
-				jsonb_agg(
-					jsonb_build_object(
-						'hash', p.hash,
-						'thread', p.thread_hash,
-						'topic', p.topic,
-						'name', p.name,
-						'options', COALESCE(p.options, ''),
-						'comment', p.comment,
-						'file_name', COALESCE(p.file_name, ''),
-						'file_mime', COALESCE(p.file_mime, ''),
-						'file_size', COALESCE(p.file_size, ''),
-						'file_dimensions', COALESCE(p.file_dimensions, ''),
-						'timestamp', p.timestamp,
-						'tagging', p.tagging,
-						'taggedBy', p.tagged_by
-					) ORDER BY p.id ASC
-				) FILTER (WHERE p.hash IS NOT NULL),
-				'[]'::jsonb
-			) as replies
-		FROM threads t
-		LEFT JOIN posts p ON t.hash = p.thread_hash
-		WHERE t.topic = $1
-		GROUP BY t.id, t.hash, t.bumped_at
-		ORDER BY t.bumped_at DESC
-		LIMIT 100
-	`
+SELECT
+	t.hash, t.topic, t.name, COALESCE(t.subject, ''), COALESCE(t.options, ''), t.comment,
+	t.file_name, t.file_mime, t.file_size, t.file_dimensions, t.timestamp,
+	COALESCE(
+		jsonb_agg(
+			jsonb_build_object(
+				'hash', p.hash,
+				'thread', p.thread_hash,
+				'topic', p.topic,
+				'name', p.name,
+				'options', COALESCE(p.options, ''),
+				'comment', p.comment,
+				'file_name', COALESCE(p.file_name, ''),
+				'file_mime', COALESCE(p.file_mime, ''),
+				'file_size', COALESCE(p.file_size, ''),
+				'file_dimensions', COALESCE(p.file_dimensions, ''),
+				'timestamp', p.timestamp,
+				'tagging', p.tagging,
+				'taggedBy', p.tagged_by
+			) ORDER BY p.id ASC
+		) FILTER (WHERE p.hash IS NOT NULL),
+		'[]'::jsonb
+	) as replies
+FROM threads t
+LEFT JOIN posts p ON t.hash = p.thread_hash
+WHERE t.topic = $1
+GROUP BY t.id, t.hash, t.bumped_at
+ORDER BY t.bumped_at DESC
+LIMIT 100
+`
 	rows, err := db.QueryContext(ctx, query, topic)
 	if err != nil {
 		return nil, fmt.Errorf("query topic threads for %q: %w", topic, err)
@@ -176,34 +224,34 @@ func GetTopicThreads(ctx context.Context, db *sql.DB, topic string) ([]map[strin
 
 func GetSingleThread(ctx context.Context, db *sql.DB, topic, threadHash string) (map[string]interface{}, error) {
 	const query = `
-		SELECT 
-			t.hash, t.topic, t.name, COALESCE(t.subject, ''), COALESCE(t.options, ''), t.comment,
-			t.file_name, t.file_mime, t.file_size, t.file_dimensions, t.timestamp,
-			COALESCE(
-				jsonb_agg(
-					jsonb_build_object(
-						'hash', p.hash,
-						'thread', p.thread_hash,
-						'topic', p.topic,
-						'name', p.name,
-						'options', COALESCE(p.options, ''),
-						'comment', p.comment,
-						'file_name', COALESCE(p.file_name, ''),
-						'file_mime', COALESCE(p.file_mime, ''),
-						'file_size', COALESCE(p.file_size, ''),
-						'file_dimensions', COALESCE(p.file_dimensions, ''),
-						'timestamp', p.timestamp,
-						'tagging', p.tagging,
-						'taggedBy', p.tagged_by
-					) ORDER BY p.id ASC
-				) FILTER (WHERE p.hash IS NOT NULL),
-				'[]'::jsonb
-			) as replies
-		FROM threads t
-		LEFT JOIN posts p ON t.hash = p.thread_hash
-		WHERE t.topic = $1 AND t.hash = $2
-		GROUP BY t.id, t.hash
-	`
+SELECT
+	t.hash, t.topic, t.name, COALESCE(t.subject, ''), COALESCE(t.options, ''), t.comment,
+	t.file_name, t.file_mime, t.file_size, t.file_dimensions, t.timestamp,
+	COALESCE(
+		jsonb_agg(
+			jsonb_build_object(
+				'hash', p.hash,
+				'thread', p.thread_hash,
+				'topic', p.topic,
+				'name', p.name,
+				'options', COALESCE(p.options, ''),
+				'comment', p.comment,
+				'file_name', COALESCE(p.file_name, ''),
+				'file_mime', COALESCE(p.file_mime, ''),
+				'file_size', COALESCE(p.file_size, ''),
+				'file_dimensions', COALESCE(p.file_dimensions, ''),
+				'timestamp', p.timestamp,
+				'tagging', p.tagging,
+				'taggedBy', p.tagged_by
+			) ORDER BY p.id ASC
+		) FILTER (WHERE p.hash IS NOT NULL),
+		'[]'::jsonb
+	) as replies
+FROM threads t
+LEFT JOIN posts p ON t.hash = p.thread_hash
+WHERE t.topic = $1 AND t.hash = $2
+GROUP BY t.id, t.hash
+`
 	var hash, top, name, subject, options, comment, fileName, fileMime, fileSize, fileDims, timestamp string
 	var repliesRaw []byte
 
@@ -243,13 +291,13 @@ func GetSingleThread(ctx context.Context, db *sql.DB, topic, threadHash string) 
 
 func GetSinglePost(ctx context.Context, db *sql.DB, hash string) (map[string]interface{}, error) {
 	const query = `
-		SELECT 
-			p.hash, p.thread_hash, p.topic, p.name, COALESCE(p.options, ''), p.comment,
-			COALESCE(p.file_name, ''), COALESCE(p.file_mime, ''), COALESCE(p.file_size, ''), COALESCE(p.file_dimensions, ''),
-			p.timestamp, p.tagging, p.tagged_by
-		FROM posts p
-		WHERE p.hash = $1
-	`
+SELECT
+	p.hash, p.thread_hash, p.topic, p.name, COALESCE(p.options, ''), p.comment,
+	COALESCE(p.file_name, ''), COALESCE(p.file_mime, ''), COALESCE(p.file_size, ''), COALESCE(p.file_dimensions, ''),
+	p.timestamp, p.tagging, p.tagged_by
+FROM posts p
+WHERE p.hash = $1
+`
 	var postHash, threadHash, topic, name, options, comment, fileName, fileMime, fileSize, fileDims, timestamp string
 	var taggingRaw, taggedByRaw []byte
 
@@ -308,7 +356,6 @@ func DeletePostOrFile(ctx context.Context, db *sql.DB, hash, password string, is
 	// 1. Check if the target is a thread OP
 	err = tx.QueryRowContext(ctx, `SELECT topic, COALESCE(password_hash, ''), COALESCE(file_name, '') FROM threads WHERE hash = $1 FOR UPDATE`, hash).
 		Scan(&topic, &dbPassHash, &opFileName)
-
 	if err == nil {
 		isThread = true
 	} else if errors.Is(err, sql.ErrNoRows) {

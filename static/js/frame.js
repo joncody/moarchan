@@ -2,10 +2,17 @@ function createApplication() {
     let activeCleanups = [];
     const controllers = Object.create(null);
     let path = "/";
-
     const router = {
         loadRoute: undefined
     };
+
+    function getCSRFToken() {
+        const meta = document.querySelector("meta[name=\"csrf-token\"]");
+        if (meta !== null && meta.content) {
+            return meta.content;
+        }
+        return "";
+    }
 
     function runCleanups() {
         if (Array.isArray(activeCleanups)) {
@@ -20,14 +27,11 @@ function createApplication() {
 
     function handleRenderSuccess(msg) {
         runCleanups();
-
         const base = document.querySelector("[data-base]");
         if (base !== null) {
             base.innerHTML = msg.template;
         }
-
         assignHrefs();
-
         if (Array.isArray(msg.controllers)) {
             msg.controllers.forEach(function (name) {
                 if (
@@ -80,7 +84,6 @@ function createApplication() {
         }
 
         const endpoint = "/api/render?path=" + encodeURIComponent(path);
-
         fetch(endpoint, {
             headers: {
                 "X-Requested-With": "XMLHttpRequest"
@@ -104,7 +107,6 @@ function createApplication() {
             renderError(err.message);
         });
     }
-
     router.loadRoute = loadRoute;
 
     function navigate(event) {
@@ -116,7 +118,6 @@ function createApplication() {
         ) {
             return;
         }
-
         event.preventDefault();
         const href = event.currentTarget.dataset.href;
         loadRoute(href);
@@ -129,7 +130,8 @@ function createApplication() {
         fetch("/logout", {
             method: "POST",
             headers: {
-                "X-Requested-With": "XMLHttpRequest"
+                "X-Requested-With": "XMLHttpRequest",
+                "X-CSRF-Token": getCSRFToken()
             }
         }).then(function () {
             const current = (globalThis !== undefined && globalThis.location ? globalThis.location.pathname : "/");
@@ -144,12 +146,10 @@ function createApplication() {
         oldHrefs.forEach(function (el) {
             el.removeEventListener("click", navigate);
         });
-
         const newHrefs = document.querySelectorAll("[data-href]");
         newHrefs.forEach(function (el) {
             el.addEventListener("click", navigate);
         });
-
         const logoutBtns = document.querySelectorAll("[data-action='logout']");
         logoutBtns.forEach(function (el) {
             el.removeEventListener("click", handleLogout);
@@ -160,7 +160,6 @@ function createApplication() {
     function subscribeToStream(topic, handlers) {
         const url = "/api/stream?topic=" + encodeURIComponent(topic);
         const sse = new EventSource(url);
-
         if (handlers !== null && typeof handlers === "object") {
             Object.keys(handlers).forEach(function (eventType) {
                 sse.addEventListener(eventType, function (e) {
@@ -173,7 +172,6 @@ function createApplication() {
                 });
             });
         }
-
         return function cleanup() {
             sse.close();
         };
@@ -187,8 +185,8 @@ function createApplication() {
         }
         const initialPath = (
             globalThis !== undefined
-            ? globalThis.location.pathname
-            : "/"
+                ? globalThis.location.pathname
+                : "/"
         );
         loadRoute(initialPath);
     }
@@ -198,6 +196,7 @@ function createApplication() {
     return Object.freeze({
         assignHrefs,
         controllers,
+        getCSRFToken,
         getPath: function () {
             return path;
         },
@@ -207,5 +206,4 @@ function createApplication() {
 }
 
 const app = createApplication();
-
 export default Object.freeze(app);

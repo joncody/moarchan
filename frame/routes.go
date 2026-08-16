@@ -165,10 +165,8 @@ func (app *App) SetupRoutes() (*http.ServeMux, error) {
 	mux.HandleFunc("POST /login", app.Login)
 	mux.HandleFunc("POST /register", app.Register)
 	mux.HandleFunc("POST /logout", app.Logout)
-
 	mux.HandleFunc("GET /api/render", app.RenderHandler)
 	mux.HandleFunc("GET /api/stream", app.SSEHandler)
-
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static/"))))
 	mux.HandleFunc("GET /", app.baseHandler)
 
@@ -192,10 +190,15 @@ func (app *App) baseHandler(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+
 	data, err := app.GetSessionValues(r)
 	if err != nil {
 		data = make(map[string]string)
 	}
+
+	// Inject CSRF token into template context
+	data["csrf_token"] = GetCSRFToken(r)
+
 	if err := app.Templates.ExecuteTemplate(w, "base", data); err != nil {
 		log.Printf("Template error in baseHandler: %v", err)
 		http.Error(w, "Render failed", http.StatusInternalServerError)
@@ -241,7 +244,6 @@ func SelectRouteConfig(route Route, privilege string) (RouteConfig, error) {
 		}
 		return RouteConfig{}, ErrForbidden
 	}
-
 	if route.Authorized.Privilege != "" {
 		if privilege == "" {
 			return RouteConfig{}, ErrUnauthorized
@@ -253,7 +255,6 @@ func SelectRouteConfig(route Route, privilege string) (RouteConfig, error) {
 		}
 		return RouteConfig{}, ErrForbidden
 	}
-
 	return route.RouteConfig, nil
 }
 
@@ -261,7 +262,6 @@ func (app *App) ResolveRouteData(ctx context.Context, cfg RouteConfig, subs []st
 	if app.DataProvider != nil {
 		return app.DataProvider(ctx, app, cfg, subs)
 	}
-
 	table := resolveDynamic(cfg.Table, subs)
 	key := resolveDynamic(cfg.Key, subs)
 	if table == "" {
@@ -334,10 +334,10 @@ func (app *App) RenderHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	templateData := map[string]interface{}{
-		"alias":     sessionValues["alias"],
-		"privilege": sessionValues["privilege"],
+		"alias":      sessionValues["alias"],
+		"privilege":  sessionValues["privilege"],
+		"csrf_token": GetCSRFToken(r),
 	}
-
 	if data != nil {
 		if dataMap, ok := data.(map[string]interface{}); ok {
 			for k, v := range dataMap {
@@ -375,7 +375,6 @@ func (app *App) RenderHandler(w http.ResponseWriter, r *http.Request) {
 		Template:    buf.String(),
 		Controllers: cleanCtrls,
 	}
-
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }

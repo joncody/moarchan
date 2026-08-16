@@ -23,7 +23,8 @@ frame.controllers.main = function main(global) {
         fetch("/logout", {
             method: "POST",
             headers: {
-                "X-Requested-With": "XMLHttpRequest"
+                "X-Requested-With": "XMLHttpRequest",
+                "X-CSRF-Token": frame.getCSRFToken()
             }
         }).then(function () {
             global.location.reload();

@@ -23,19 +23,15 @@ frame.controllers.auth = function auth(global) {
         }
         const aliasInput = dom("#auth-alias").get(0);
         const passInput = dom("#auth-password").get(0);
-
         const alias = (aliasInput && aliasInput.value ? aliasInput.value.trim() : "");
         const password = (passInput && passInput.value ? passInput.value : "");
-
         if (passInput) {
             passInput.value = "";
         }
-
         if (!alias || !password) {
             showMessage("Alias and password are required.", true);
             return;
         }
-
         const fd = new FormData();
         fd.append("alias", alias);
         fd.append("password", password);
@@ -44,7 +40,8 @@ frame.controllers.auth = function auth(global) {
             method: "POST",
             body: fd,
             headers: {
-                "X-Requested-With": "XMLHttpRequest"
+                "X-Requested-With": "XMLHttpRequest",
+                "X-CSRF-Token": frame.getCSRFToken()
             }
         }).then(function (res) {
             if (res.ok) {
@@ -67,18 +64,15 @@ frame.controllers.auth = function auth(global) {
         const aliasInput = dom("#auth-alias").get(0);
         const passInput = dom("#auth-password").get(0);
         const repeatInput = dom("#auth-password-repeat").get(0);
-
         const alias = (aliasInput && aliasInput.value ? aliasInput.value.trim() : "");
         const password = (passInput && passInput.value ? passInput.value : "");
         const repeat = (repeatInput && repeatInput.value ? repeatInput.value : "");
-
         if (passInput) {
             passInput.value = "";
         }
         if (repeatInput) {
             repeatInput.value = "";
         }
-
         if (!alias || !password) {
             showMessage("Alias and password are required.", true);
             return;
@@ -91,7 +85,6 @@ frame.controllers.auth = function auth(global) {
             showMessage("Passwords do not match.", true);
             return;
         }
-
         const fd = new FormData();
         fd.append("alias", alias);
         fd.append("password", password);
@@ -100,7 +93,8 @@ frame.controllers.auth = function auth(global) {
             method: "POST",
             body: fd,
             headers: {
-                "X-Requested-With": "XMLHttpRequest"
+                "X-Requested-With": "XMLHttpRequest",
+                "X-CSRF-Token": frame.getCSRFToken()
             }
         }).then(function (res) {
             if (res.ok) {

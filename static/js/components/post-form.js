@@ -1,4 +1,5 @@
 import dom from "../dom.js";
+import frame from "../frame.js";
 
 export default function createPostForm(global, config) {
     const topic = config.topic;
@@ -54,8 +55,8 @@ export default function createPostForm(global, config) {
         const passInput = dom("#new-post-password").get(0);
         const commentInput = dom("#new-post-comment").get(0);
         const fileInput = dom("#new-post-file").get(0);
-
         const files = (fileInput && fileInput.files) || [];
+
         if (files.length === 0) {
             return global.alert("File required to create a new thread.");
         }
@@ -72,7 +73,13 @@ export default function createPostForm(global, config) {
         fd.append("comment", (commentInput && commentInput.value) || "");
         fd.append("file", files[0]);
 
-        fetch("/api/threads", { method: "POST", body: fd })
+        fetch("/api/threads", {
+            method: "POST",
+            body: fd,
+            headers: {
+                "X-CSRF-Token": frame.getCSRFToken()
+            }
+        })
             .then(function (res) {
                 if (!res.ok) {
                     return res.text().then(function (msg) { global.alert(msg); });
@@ -88,7 +95,6 @@ export default function createPostForm(global, config) {
         if (e && typeof e.preventDefault === "function") {
             e.preventDefault();
         }
-
         let targetThread = threadHash;
         let prefix = "#new-post-";
         if (fromQuickReply) {
@@ -96,7 +102,6 @@ export default function createPostForm(global, config) {
             const boxThread = dom(".reply-box").data("thread");
             targetThread = Array.isArray(boxThread) ? boxThread[0] : boxThread;
         }
-
         if (!targetThread) {
             return global.alert("Unable to locate target thread ID.");
         }
@@ -106,12 +111,11 @@ export default function createPostForm(global, config) {
         const passInput = dom(prefix + "password").get(0);
         const commentInput = dom(prefix + "comment").get(0);
         const fileInput = dom(prefix + "file").get(0);
-
         const comment = (commentInput && commentInput.value) || "";
+
         if (!comment.trim()) {
             return global.alert("Comment is required to post a reply.");
         }
-
         const files = (fileInput && fileInput.files) || [];
         if (files.length > 0 && files[0].size > 8 * 1024 * 1024) {
             return global.alert("File exceeds maximum allowed limit of 8 MB.");
@@ -128,7 +132,13 @@ export default function createPostForm(global, config) {
             fd.append("file", files[0]);
         }
 
-        fetch("/api/replies", { method: "POST", body: fd })
+        fetch("/api/replies", {
+            method: "POST",
+            body: fd,
+            headers: {
+                "X-CSRF-Token": frame.getCSRFToken()
+            }
+        })
             .then(function (res) {
                 if (!res.ok) {
                     return res.text().then(function (msg) { global.alert(msg); });
