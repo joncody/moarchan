@@ -6,15 +6,20 @@ A high-performance, real-time 4chan clone built from scratch using **Go**, **HTT
 
 ## 🚀 Key Features
 
-* **HTTP/2 & Real-Time SSE Bus:** Multiplexed Server-Sent Events distributed horizontally across Go instances using PostgreSQL `LISTEN / NOTIFY` with compact JSON payloads.
+* **HTTP/2 & Real-Time SSE Bus:** Multiplexed Server-Sent Events distributed horizontally across Go instances using PostgreSQL `LISTEN / NOTIFY` with compact JSON descriptors and database hydration fallback.
+* **Pluggable Storage Abstraction:** Abstracted `Storage` interface supporting local disk storage and cloud object stores (S3, MinIO, GCS) with non-blocking concurrent file writes and atomic thumbnail rollbacks.
+* **High-Fidelity Bilinear Thumbnails:** High-quality image downsampling using `golang.org/x/image/draw.ApproxBiLinear` interpolation with strict dimension bomb defenses (10000x10000px validation) and EXIF metadata stripping.
+* **Transactional Versioned Migrations:** Robust, run-once schema migrations (`schema_migrations` tracking table) executing within atomic transactions, eliminating boot-time `UPDATE` backfill bottlenecks.
+* **Token-Bucket Rate Limiting:** In-memory IP-based token bucket rate limiter (2 req/sec, burst 10) applied to mutation endpoints (`POST`, `PUT`, `DELETE`) with HTTP 429 response handling.
+* **Double-Submit CSRF Protection:** Timing-attack resistant CSRF middleware utilizing `crypto/subtle.ConstantTimeCompare`, non-HttpOnly cookie distribution, and client-side `X-CSRF-Token` headers.
 * **Pure Crockfordian JavaScript:** Modular client-side SPA runtime written with zero usage of `this`, `class`, `var`, `new` (in application code), or `void` operators.
 * **Componentized Frontend Architecture:** Decomposed into dedicated ES modules (`post-renderer`, `tag-hover`, `reply-box`, `post-actions`, `post-form`) with explicit lifecycle teardowns to prevent memory leaks.
 * **In-Place Image Expansion:** Clickable thumbnail expansion within the feed and thread views, with filename links directly opening raw full-resolution uploads in a new tab.
-* **Chronological Bumping & Sage:** Real-time thread bumping with `bumped_at` timestamps, chronological reply ordering via `jsonb_agg`, and `sage` bypass support.
+* **Chronological Bumping & Sage:** Real-time thread bumping with `bumped_at` timestamps, chronological reply ordering via PostgreSQL `jsonb_agg`, and `sage` bypass support.
 * **HTML5 History API Routing:** Clean URLs (`/g`, `/g/thread/a1b2c3d4e`) with deep-linking support and History API client navigation.
-* **Decoupled Engine (`frame`):** Core framework provides session management, middleware pipelines, dynamic routing, and an SSE event hub independent of domain logic.
-* **Protected Deletions & File Cleanup:** Post and file deletion secured with bcrypt password verification (or admin override), with automatic disk cleanup of orphaned cascade files.
-* **OWASP Hardened:** Includes Slowloris protection (`ReadHeaderTimeout`), image dimension bombs defense (10000x10000px bounds validation), XSS sanitization, timing-attack resistant password verification (`bcrypt`), and security headers.
+* **Decoupled Engine (`frame`):** Standalone framework providing AES-256-GCM AEAD encrypted sessions, middleware pipelines, dynamic routing, and an SSE event hub independent of domain logic.
+* **Protected Deletions & File Cleanup:** Post and file deletion secured with bcrypt password verification (or admin override), with automatic storage cleanup of orphaned cascade files.
+* **OWASP Hardened:** Includes Slowloris protection (`ReadHeaderTimeout`), XSS sanitization, timing-attack resistant password verification (`bcrypt`), and defensive security headers (`nosniff`, `DENY`, `mode=block`).
 
 ---
 
@@ -25,12 +30,12 @@ A high-performance, real-time 4chan clone built from scratch using **Go**, **HTT
 
 ## 🛠️ Tech Stack
 
-* **Backend:** Go (Golang)
-* **Frontend:** Vanilla JavaScript (ES6 Modules), HTML5, CSS3
+* **Backend:** Go (Golang 1.22+)
+* **Frontend:** Vanilla JavaScript (ES6 Modules, Crockfordian), HTML5, CSS3
 * **Database:** PostgreSQL 16+
-* **Protocol:** HTTP/2 over TLS / Cleartext HTTP/2 (h2c) / Server-Sent Events
-* **Routing:** `github.com/gorilla/mux`
-* **Sessions:** `github.com/gorilla/sessions`
+* **Protocol:** HTTP/2 over TLS / Cleartext HTTP/2 (h2c) / Server-Sent Events (SSE)
+* **Routing:** Go 1.22+ Native `http.ServeMux` Pattern Matching
+* **Sessions:** Custom AEAD AES-256-GCM Encrypted Cookie Sessions (`frame/session.go`)
 
 ---
 
@@ -67,10 +72,13 @@ POSTGRES_DB=moarchan
 POSTGRES_SSLMODE=disable
 SESSION_HASH_KEY=12345678901234567890123456789012
 SESSION_BLOCK_KEY=abcdefghijklmnopqrstuvwx12345678
+UPLOAD_PATH=./static/images/uploads
+UPLOAD_URL_PREFIX=/static/images/uploads
 ```
 
-### 4. Run the Application
+### 4. Install Dependencies & Run
 ```bash
+go mod tidy
 go run .
 ```
 
@@ -92,15 +100,17 @@ docker-compose up --build
 
 | Environment Variable | Default Value | Description |
 | :--- | :--- | :--- |
-| `PORT` | `9001` | Server port |
+| `PORT` | `9001` | Server HTTP port |
 | `POSTGRES_HOST` | `localhost` | PostgreSQL host address |
 | `POSTGRES_PORT` | `5432` | PostgreSQL port |
 | `POSTGRES_USER` | `postgres` | PostgreSQL username |
 | `POSTGRES_PASSWORD` | `postgres` | PostgreSQL password |
 | `POSTGRES_DB` | `moarchan` | Database name |
 | `POSTGRES_SSLMODE` | `disable` | SSL mode (`disable`, `require`, `verify-full`) |
-| `SESSION_HASH_KEY` | *(32 bytes)* | Secret key for signing session cookies |
-| `SESSION_BLOCK_KEY` | *(32 bytes)* | Secret key for encrypting session payload |
+| `SESSION_HASH_KEY` | *(32 bytes)* | Secret key for deriving session encryption key |
+| `SESSION_BLOCK_KEY` | *(32 bytes)* | Secret key for deriving session encryption key |
+| `UPLOAD_PATH` | `./static/images/uploads` | Local filesystem base path for media storage |
+| `UPLOAD_URL_PREFIX` | `/static/images/uploads` | Public URL prefix for uploaded media assets |
 
 ---
 
@@ -109,17 +119,18 @@ docker-compose up --build
 ```
 .
 ├── main.go               # Application entrypoint & HTTP REST handlers
-├── db_store.go           # Relational DB schema, migrations & queries
+├── db_store.go           # Relational DB schema, versioned migrations & queries
 ├── docker-compose.yml    # Container orchestration setup
 ├── .env                  # Local environment configuration (git-ignored)
 ├── frame/                # Standalone micro-framework
-│   ├── frame.go          # Core app lifecycle & DB connection pool
+│   ├── frame.go          # Core app lifecycle, DB pool & migration runners
 │   ├── routes.go         # Fluent route builder & template renderer
 │   ├── sse.go            # Distributed Postgres LISTEN/NOTIFY SSE hub
-│   ├── middleware.go     # Logging, Panic Recovery, Security headers
+│   ├── middleware.go     # Logging, Panic Recovery, CSRF, Rate Limiting & Security headers
+│   ├── storage.go        # Pluggable Storage interface & LocalDiskStorage implementation
 │   ├── db.go             # Generic KV document database helpers
 │   ├── auth.go           # Bcrypt user authentication (Demo)
-│   └── session.go        # Secure Gorilla cookie sessions
+│   └── session.go        # Secure AEAD AES-256-GCM cookie sessions
 └── static/
     ├── css/              # Reset, post, thread, reply & screen stylesheet rules
     ├── images/           # Application graphics & upload directory
