@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Service controller coordinating imageboard feeds,
+ * active threads, and real-time SSE updates.
+ */
+
 import dom from "../dom.js";
 import frame from "../frame.js";
 import topicsMap from "../components/topics-map.js";
@@ -6,8 +11,14 @@ import createReplyBox from "../components/reply-box.js";
 import createPostActions from "../components/post-actions.js";
 import createPostForm from "../components/post-form.js";
 
-frame.controllers.service = function service(global) {
-    const pathParts = global.location.pathname.split("/").filter(Boolean);
+/**
+ * Controller for board index and single-thread views.
+ *
+ * @returns {function(): void} Unified teardown function to clean up
+ *     SSE streams and components.
+ */
+frame.controllers.service = function service() {
+    const pathParts = globalThis.location.pathname.split("/").filter(Boolean);
     const topic = pathParts[0] || "";
     const isThreadView = (pathParts[1] === "thread");
     const threadHash = pathParts[2] || "";
@@ -20,10 +31,10 @@ frame.controllers.service = function service(global) {
     let postForm;
 
     // 1. Initialize Tag Hover Component
-    const tagHover = createTagHover(global);
+    const tagHover = createTagHover();
 
     // 2. Initialize Post Form Component
-    postForm = createPostForm(global, {
+    postForm = createPostForm({
         isThreadView,
         onSubmitted: function () {
             if (replyBox) {
@@ -35,21 +46,32 @@ frame.controllers.service = function service(global) {
     });
 
     // 3. Initialize Reply Box Component
-    replyBox = createReplyBox(global, function (e) {
+    replyBox = createReplyBox(function (e) {
         postForm.submitReplyQuick(e);
     });
 
     // 4. Initialize Post Actions Component
-    const postActions = createPostActions(global, {
+    const postActions = createPostActions({
         onReplyClick: function (threadId, postHash) {
             replyBox.open(threadId, postHash);
         },
         topic
     });
 
-    // 5. SSE Real-Time Event Handlers
+    /**
+     * Prepends a new thread element to the board view from SSE stream.
+     *
+     * @param {Object} data - SSE thread payload.
+     * @param {string} data.hash - Thread identifier hash.
+     * @param {string} data.html - Rendered thread HTML markup.
+     * @returns {void}
+     */
     function handleNewThread(data) {
-        if (!data || !data.hash || document.getElementById("post-" + data.hash) !== null) {
+        if (
+            !data ||
+            !data.hash ||
+            document.getElementById("post-" + data.hash) !== null
+        ) {
             return;
         }
         const boardEl = dom(".board").get(0);
@@ -62,11 +84,27 @@ frame.controllers.service = function service(global) {
         }
     }
 
+    /**
+     * Appends a new reply to its target thread from SSE stream.
+     *
+     * @param {Object} data - SSE reply payload.
+     * @param {string} data.hash - Reply identifier hash.
+     * @param {string} data.thread - Target parent thread hash.
+     * @param {string} data.html - Rendered reply HTML markup.
+     * @param {string} [data.options] - Post options (e.g., 'sage').
+     * @returns {void}
+     */
     function handleNewReply(data) {
-        if (!data || !data.hash || document.getElementById("post-" + data.hash) !== null) {
+        if (
+            !data ||
+            !data.hash ||
+            document.getElementById("post-" + data.hash) !== null
+        ) {
             return;
         }
-        const threadContainer = dom("#post-" + data.thread + " .thread-container");
+        const threadContainer = dom(
+            "#post-" + data.thread + " .thread-container"
+        );
         if (threadContainer.length() > 0 && data.html) {
             threadContainer.get(0).insertAdjacentHTML("beforeend", data.html);
             const replyEl = dom("#post-" + data.hash);
@@ -74,12 +112,18 @@ frame.controllers.service = function service(global) {
             tagHover.bindTags();
             postActions.initReplies(data.thread);
 
-            // In topic board view, bump thread to top of feed unless 'sage' is specified
+            // In topic board view, bump thread to top of feed
+            // unless 'sage' is specified
             if (!isThreadView) {
-                const isSage = (data.options && data.options.toLowerCase().indexOf("sage") !== -1);
+                const isSage = (
+                    data.options &&
+                    data.options.toLowerCase().indexOf("sage") !== -1
+                );
                 if (!isSage) {
                     const boardEl = dom(".board").get(0);
-                    const threadEl = document.getElementById("post-" + data.thread);
+                    const threadEl = document.getElementById(
+                        "post-" + data.thread
+                    );
                     if (boardEl && threadEl) {
                         boardEl.insertBefore(threadEl, boardEl.firstChild);
                     }
@@ -88,6 +132,14 @@ frame.controllers.service = function service(global) {
         }
     }
 
+    /**
+     * Removes or updates a deleted post element in response to SSE event.
+     *
+     * @param {Object} data - SSE delete-post payload.
+     * @param {string} data.hash - Target post hash to delete.
+     * @param {boolean} [data.file_only] - Whether only file was deleted.
+     * @returns {void}
+     */
     function handleDeletePost(data) {
         if (!data || !data.hash) {
             return;

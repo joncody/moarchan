@@ -1,4 +1,13 @@
-const topicsMap = Object.freeze({
+/**
+ * @fileoverview Frozen map associating board slugs with full
+ * human-readable board titles.
+ */
+
+/**
+ * Mapping of board slug identifiers to full human-readable board titles.
+ * @type {Readonly<Object.<string, string>>}
+ */
+export default Object.freeze({
     "3": "3DCG",
     "a": "Anime & Manga",
     "adv": "Advice",
@@ -63,5 +72,3 @@ const topicsMap = Object.freeze({
     "x": "Paranormal",
     "y": "Yaoi"
 });
-
-export default topicsMap;

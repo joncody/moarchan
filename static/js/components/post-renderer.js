@@ -1,3 +1,13 @@
+/**
+ * @fileoverview Utility functions for rendering and escaping post content.
+ */
+
+/**
+ * Escapes unsafe characters for HTML display.
+ *
+ * @param {string} str - Raw input text.
+ * @returns {string} HTML-escaped text.
+ */
 function escapeHtml(str) {
     if (typeof str !== "string") {
         return "";

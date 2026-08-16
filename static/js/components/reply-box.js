@@ -1,6 +1,26 @@
+/**
+ * @fileoverview Floating, draggable Quick Reply modal component.
+ */
+
 import dom from "../dom.js";
 
-export default function createReplyBox(global, onPostReply) {
+/**
+ * @typedef {Object} ReplyBox
+ * @property {() => void} clear - Clears form inputs and closes modal.
+ * @property {(e?: Event) => void} close - Closes the quick reply modal.
+ * @property {() => boolean} isOpen - Returns true if modal is visible.
+ * @property {(threadId: string, postHash?: string) => void} open
+ *     Opens the quick reply box for a thread with optional quote.
+ * @property {() => void} cleanup - Unbinds drag and modal event listeners.
+ */
+
+/**
+ * Creates the floating Quick Reply modal.
+ *
+ * @param {Function} [onPostReply] - Callback when user clicks 'Post'.
+ * @returns {Readonly<ReplyBox>} Frozen quick reply modal controller.
+ */
+export default Object.freeze(function createReplyBox(onPostReply) {
     const replyBox = dom(".reply-box");
     const replyBoxHeader = dom(".reply-box-header");
     const replyBoxHeaderText = dom(".reply-box-header-text");
@@ -9,6 +29,12 @@ export default function createReplyBox(global, onPostReply) {
     let mouseX = 0;
     let mouseY = 0;
 
+    /**
+     * Handles modal dragging on mouse move.
+     *
+     * @param {MouseEvent} e - Mouse move event object.
+     * @returns {void}
+     */
     function dragging(e) {
         const topVal = parseInt(replyBox.css("top")[0], 10) || 0;
         const leftVal = parseInt(replyBox.css("left")[0], 10) || 0;
@@ -20,10 +46,21 @@ export default function createReplyBox(global, onPostReply) {
         mouseY = e.clientY;
     }
 
+    /**
+     * Unbinds mousemove drag listener on mouse release.
+     *
+     * @returns {void}
+     */
     function stopDrag() {
         dom(document.body).off("mousemove", dragging, false);
     }
 
+    /**
+     * Initiates modal dragging on header mousedown.
+     *
+     * @param {MouseEvent} e - Mousedown event object.
+     * @returns {void}
+     */
     function startDrag(e) {
         mouseX = e.clientX;
         mouseY = e.clientY;
@@ -31,6 +68,12 @@ export default function createReplyBox(global, onPostReply) {
         dom(document.body).once("mouseup", stopDrag, false);
     }
 
+    /**
+     * Hides the quick reply modal.
+     *
+     * @param {Event} [e] - Triggering event.
+     * @returns {void}
+     */
     function close(e) {
         if (e && typeof e.preventDefault === "function") {
             e.preventDefault();
@@ -38,6 +81,13 @@ export default function createReplyBox(global, onPostReply) {
         replyBox.addClass("hide");
     }
 
+    /**
+     * Opens the quick reply modal and pre-fills quote tags if provided.
+     *
+     * @param {string} threadId - Target thread identifier.
+     * @param {string} [postHash] - Post hash to reference in comment.
+     * @returns {void}
+     */
     function open(threadId, postHash) {
         replyBox.data("thread", threadId);
         replyBoxHeaderText.html(threadId).attr("title", threadId);
@@ -45,12 +95,21 @@ export default function createReplyBox(global, onPostReply) {
         const commentInput = dom("#reply-box-comment").get(0);
         if (commentInput && postHash) {
             const currentVal = commentInput.value || "";
-            commentInput.value = (currentVal ? currentVal + "\n" : "") + ">>" + postHash + "\n";
+            commentInput.value = (
+                currentVal
+                ? currentVal + "\n"
+                : ""
+            ) + ">>" + postHash + "\n";
             commentInput.focus();
         }
         replyBox.removeClass("hide");
     }
 
+    /**
+     * Resets quick reply form inputs and hides the modal.
+     *
+     * @returns {void}
+     */
     function clear() {
         [
             "#reply-box-name",
@@ -75,12 +134,6 @@ export default function createReplyBox(global, onPostReply) {
     }
 
     return Object.freeze({
-        clear,
-        close,
-        isOpen: function () {
-            return !replyBox.hasClass("hide");
-        },
-        open,
         cleanup: function () {
             replyBoxHeader.off("mousedown", startDrag, false);
             replyBoxClose.off("click", close, false);
@@ -88,6 +141,12 @@ export default function createReplyBox(global, onPostReply) {
                 replyBoxPost.off("click", onPostReply, false);
             }
             dom(document.body).off("mousemove", dragging, false);
-        }
+        },
+        clear,
+        close,
+        isOpen: function () {
+            return !replyBox.hasClass("hide");
+        },
+        open
     });
-}
+});

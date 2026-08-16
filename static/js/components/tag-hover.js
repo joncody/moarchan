@@ -1,12 +1,46 @@
+/**
+ * @fileoverview Component managing hover preview tooltips and scroll-to
+ * jumps for post quote tags (>>hash).
+ */
+
 import dom from "../dom.js";
 
-export default function createTagHover(global) {
+/**
+ * @typedef {Object} TagHover
+ * @property {() => void} bindTags
+ *     Binds hover and click navigation events to all post tags.
+ * @property {() => void} cleanup
+ *     Unbinds tag hover events and removes preview clones.
+ */
+
+/**
+ * Creates tag hover preview and navigation handlers.
+ *
+ * @returns {Readonly<TagHover>} Frozen tag hover controller.
+ */
+export default Object.freeze(function createTagHover() {
+    /**
+     * Extracts post hash tag identifier from event target.
+     *
+     * @param {Event} e - DOM event object.
+     * @returns {string|undefined} Tag string.
+     */
     function getDataTag(e) {
         const target = dom(e.currentTarget || e.target);
         const dataVal = target.data("tag");
-        return Array.isArray(dataVal) ? dataVal[0] : dataVal;
+        return (
+            Array.isArray(dataVal)
+            ? dataVal[0]
+            : dataVal
+        );
     }
 
+    /**
+     * Scrolls smoothly to the referenced post on tag click.
+     *
+     * @param {Event} [e] - Click event object.
+     * @returns {void}
+     */
     function goToTaggedPost(e) {
         const tag = getDataTag(e);
         if (!tag) {
@@ -19,13 +53,19 @@ export default function createTagHover(global) {
         dom(".highlight").removeClass("highlight");
         const el = tagged.get(0);
         if (el && typeof el.scrollIntoView === "function") {
-            el.scrollIntoView({ behavior: "smooth", block: "center" });
+            el.scrollIntoView({behavior: "smooth", block: "center"});
         }
         if (!tagged.hasClass("thread")) {
             tagged.addClass("highlight");
         }
     }
 
+    /**
+     * Removes highlight and hover clone preview when mouse leaves tag.
+     *
+     * @param {Event} [e] - Mouseout event object.
+     * @returns {void}
+     */
     function hoverOutTag(e) {
         const tag = getDataTag(e);
         if (tag) {
@@ -34,6 +74,12 @@ export default function createTagHover(global) {
         dom(".tag-hover-clone").remove();
     }
 
+    /**
+     * Displays in-view highlight or floating preview clone on hover.
+     *
+     * @param {MouseEvent} e - Mouseover event object.
+     * @returns {void}
+     */
     function hoverOverTag(e) {
         const tag = getDataTag(e);
         if (!tag) {
@@ -50,8 +96,8 @@ export default function createTagHover(global) {
 
         const rect = el.getBoundingClientRect();
         const docEl = document.documentElement;
-        const vHeight = global.innerHeight || docEl.clientHeight;
-        const vWidth = global.innerWidth || docEl.clientWidth;
+        const vHeight = globalThis.innerHeight || docEl.clientHeight;
+        const vWidth = globalThis.innerWidth || docEl.clientWidth;
         const inview = (
             rect.top >= 0 &&
             rect.left >= 0 &&
@@ -81,6 +127,11 @@ export default function createTagHover(global) {
         }
     }
 
+    /**
+     * Attaches mouseover and click handlers to all tag links.
+     *
+     * @returns {void}
+     */
     function bindTags() {
         dom(".post-tag").each(function (node) {
             const tagDom = dom(node);
@@ -99,4 +150,4 @@ export default function createTagHover(global) {
             dom(".tag-hover-clone").remove();
         }
     });
-}
+});

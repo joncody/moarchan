@@ -1,3 +1,5 @@
+// Package frame provides a decoupled web framework featuring session management,
+// dynamic routing, database KV helpers, and Server-Sent Events (SSE).
 package frame
 
 import (
@@ -17,10 +19,13 @@ import (
 )
 
 var (
+	// ErrUnauthorized indicates missing authentication credentials.
 	ErrUnauthorized = errors.New("401 Unauthorized: authentication required")
-	ErrForbidden    = errors.New("403 Forbidden: insufficient privilege")
+	// ErrForbidden indicates insufficient user privileges for the requested route.
+	ErrForbidden = errors.New("403 Forbidden: insufficient privilege")
 )
 
+// RouteConfig specifies data bindings, HTML templates, and JS controllers for a route tier.
 type RouteConfig struct {
 	Table       string
 	Key         string
@@ -29,6 +34,7 @@ type RouteConfig struct {
 	Privilege   string
 }
 
+// Route represents a declared URL pattern alongside role-based route configurations.
 type Route struct {
 	Route      string
 	Admin      RouteConfig
@@ -36,28 +42,33 @@ type Route struct {
 	RouteConfig
 }
 
+// AddedRoute represents a custom regex pattern mapped to a procedural HTTP handler.
 type AddedRoute struct {
 	Pattern *regexp.Regexp
 	Handler func(app *App, w http.ResponseWriter, r *http.Request, matches []string)
 }
 
+// CompiledRoute is a compiled regular expression paired with its route definition.
 type CompiledRoute struct {
 	Pattern *regexp.Regexp
 	Config  Route
 }
 
+// RoutePayload represents the JSON payload delivered to the SPA client on page transitions.
 type RoutePayload struct {
 	Template    string   `json:"template"`
 	Controllers []string `json:"controllers"`
 }
 
+// DataProvider resolves dynamic application data for matched routes before rendering.
 type DataProvider func(ctx context.Context, app *App, cfg RouteConfig, subs []string) (interface{}, error)
 
-// Fluent Route Builder Pattern
+// RouteBuilder provides a fluent interface for configuring programmatic routes.
 type RouteBuilder struct {
 	route *Route
 }
 
+// Route initializes a new fluent route definition for the given URL regex pattern.
 func (app *App) Route(pattern string) *RouteBuilder {
 	r := Route{
 		Route: pattern,
@@ -68,36 +79,48 @@ func (app *App) Route(pattern string) *RouteBuilder {
 	}
 }
 
+// Template binds an HTML template name to the route.
 func (b *RouteBuilder) Template(tmpl string) *RouteBuilder {
 	b.route.RouteConfig.Template = tmpl
 	return b
 }
 
+// Controller binds one or more JavaScript client controllers to the route.
 func (b *RouteBuilder) Controller(ctrls ...string) *RouteBuilder {
 	b.route.RouteConfig.Controllers = strings.Join(ctrls, ",")
 	return b
 }
 
+// Table binds a database table or capture token (e.g. "$1") to the route.
 func (b *RouteBuilder) Table(table string) *RouteBuilder {
 	b.route.RouteConfig.Table = table
 	return b
 }
 
+// Key binds a lookup key or capture token (e.g. "$2") to the route.
 func (b *RouteBuilder) Key(key string) *RouteBuilder {
 	b.route.RouteConfig.Key = key
 	return b
 }
 
+// Privilege sets the required access tier for the route.
 func (b *RouteBuilder) Privilege(priv string) *RouteBuilder {
 	b.route.RouteConfig.Privilege = priv
 	return b
 }
 
 var (
+	// keyCleanRegex strips characters not permitted in URL keys.
 	keyCleanRegex = regexp.MustCompile(`[^a-z0-9_\-\s]+`)
-	reservedPath  = regexp.MustCompile(`^/(api/|login|register|logout|static/|favicon\.ico)`)
+	// reservedPath matches static assets and API routes that bypass the SPA root handler.
+	reservedPath = regexp.MustCompile(`^/(api/|login|register|logout|static/|favicon\.ico)`)
 )
 
+// ToKey converts a human-readable title into a clean URL slug.
+//
+// Example:
+//
+//	ToKey("Anime & Manga - General") -> "anime-manga_-_general"
 func ToKey(s string) string {
 	s = strings.ToLower(s)
 	s = keyCleanRegex.ReplaceAllString(s, "")
@@ -106,6 +129,7 @@ func ToKey(s string) string {
 	return strings.Trim(s, "-")
 }
 
+// titleCaseWords capitalizes the initial letter of each word in a string.
 func titleCaseWords(s string) string {
 	words := strings.Fields(s)
 	for i, w := range words {
@@ -116,6 +140,11 @@ func titleCaseWords(s string) string {
 	return strings.Join(words, " ")
 }
 
+// FromKey converts a URL slug back into a title-cased display title.
+//
+// Example:
+//
+//	FromKey("anime-manga_-_general") -> "Anime Manga - General"
 func FromKey(s string) string {
 	s = strings.Replace(s, "_-_", " __SEPARATOR__ ", -1)
 	s = strings.Replace(s, "-", " ", -1)
@@ -123,6 +152,7 @@ func FromKey(s string) string {
 	return titleCaseWords(s)
 }
 
+// TemplateFuncs defines helper functions available within Go HTML templates.
 var TemplateFuncs = template.FuncMap{
 	"unescaped": func(x string) interface{} { return template.HTML(x) },
 	"sha1sum":   func(x string) string { return fmt.Sprintf("%x", sha1.Sum([]byte(x))) },
@@ -136,6 +166,7 @@ var TemplateFuncs = template.FuncMap{
 	"fromkey":   FromKey,
 }
 
+// CompileRoutes compiles all declared route patterns into anchored regular expressions.
 func (app *App) CompileRoutes() error {
 	compiled := make([]CompiledRoute, 0, len(app.Routes))
 	for _, r := range app.Routes {
@@ -159,6 +190,7 @@ func (app *App) CompileRoutes() error {
 	return nil
 }
 
+// SetupRoutes builds the standard HTTP ServeMux routing tree.
 func (app *App) SetupRoutes() (*http.ServeMux, error) {
 	mux := http.NewServeMux()
 
@@ -173,6 +205,7 @@ func (app *App) SetupRoutes() (*http.ServeMux, error) {
 	return mux, nil
 }
 
+// AddRoute registers an imperatively handled route with regex parameter matching.
 func (app *App) AddRoute(pattern string, handler func(app *App, w http.ResponseWriter, r *http.Request, matches []string)) error {
 	re, err := regexp.Compile(pattern)
 	if err != nil {
@@ -185,6 +218,7 @@ func (app *App) AddRoute(pattern string, handler func(app *App, w http.ResponseW
 	return nil
 }
 
+// baseHandler renders the top-level HTML base template containing the SPA shell.
 func (app *App) baseHandler(w http.ResponseWriter, r *http.Request) {
 	if reservedPath.MatchString(r.URL.Path) {
 		http.NotFound(w, r)
@@ -205,6 +239,7 @@ func (app *App) baseHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// resolveDynamic resolves positional capture tokens (e.g., "$1") against URL submatches.
 func resolveDynamic(field string, subs []string) string {
 	if !strings.HasPrefix(field, "$") {
 		return field
@@ -215,6 +250,7 @@ func resolveDynamic(field string, subs []string) string {
 	return ""
 }
 
+// matchAddedRoute attempts to dispatch the request to any manually registered AddedRoutes.
 func (app *App) matchAddedRoute(w http.ResponseWriter, r *http.Request, path string) bool {
 	for _, added := range app.Added {
 		if subs := added.Pattern.FindStringSubmatch(path); subs != nil {
@@ -225,6 +261,7 @@ func (app *App) matchAddedRoute(w http.ResponseWriter, r *http.Request, path str
 	return false
 }
 
+// MatchCompiledRoute tests a request path against compiled regular expression routes.
 func (app *App) MatchCompiledRoute(path string) (*CompiledRoute, []string) {
 	for _, cr := range app.CompiledRoutes {
 		if subs := cr.Pattern.FindStringSubmatch(path); subs != nil {
@@ -234,6 +271,7 @@ func (app *App) MatchCompiledRoute(path string) (*CompiledRoute, []string) {
 	return nil, nil
 }
 
+// SelectRouteConfig determines the appropriate route configuration based on user privilege.
 func SelectRouteConfig(route Route, privilege string) (RouteConfig, error) {
 	if route.Admin.Template != "" || route.Admin.Controllers != "" {
 		if privilege == "admin" {
@@ -258,6 +296,7 @@ func SelectRouteConfig(route Route, privilege string) (RouteConfig, error) {
 	return route.RouteConfig, nil
 }
 
+// ResolveRouteData invokes the application DataProvider or fallback KV store to populate template data.
 func (app *App) ResolveRouteData(ctx context.Context, cfg RouteConfig, subs []string) (interface{}, error) {
 	if app.DataProvider != nil {
 		return app.DataProvider(ctx, app, cfg, subs)
@@ -279,6 +318,7 @@ func (app *App) ResolveRouteData(ctx context.Context, cfg RouteConfig, subs []st
 	return app.GetRows(ctx, table)
 }
 
+// RenderHandler serves dynamic HTML templates and controllers as JSON for client-side SPA navigation.
 func (app *App) RenderHandler(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimSpace(r.URL.Query().Get("path"))
 	if path == "" {

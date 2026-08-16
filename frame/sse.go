@@ -1,3 +1,5 @@
+// Package frame provides a decoupled web framework featuring session management,
+// dynamic routing, database KV helpers, and Server-Sent Events (SSE).
 package frame
 
 import (
@@ -13,14 +15,17 @@ import (
 	"github.com/lib/pq"
 )
 
+// SSEEvent represents a real-time event sent over the SSE connection.
 type SSEEvent struct {
 	Topic string          `json:"topic"`
 	Event string          `json:"event"`
 	Data  json.RawMessage `json:"data"`
 }
 
+// EventResolver resolves and hydrates compact notification payloads before broadcasting.
 type EventResolver func(ctx context.Context, topic, event string, rawData []byte) ([]byte, error)
 
+// SSEHub coordinates real-time topic subscribers and horizontal PostgreSQL LISTEN/NOTIFY synchronization.
 type SSEHub struct {
 	mu            sync.RWMutex
 	subscribers   map[string]map[chan SSEEvent]bool
@@ -31,6 +36,7 @@ type SSEHub struct {
 	EventResolver EventResolver
 }
 
+// NewSSEHub creates a new in-memory pub-sub hub.
 func NewSSEHub() *SSEHub {
 	return &SSEHub{
 		subscribers: make(map[string]map[chan SSEEvent]bool),
@@ -38,7 +44,7 @@ func NewSSEHub() *SSEHub {
 	}
 }
 
-// InitDBListener starts the PostgreSQL LISTEN worker on channel "moarchan_events"
+// InitDBListener starts the PostgreSQL LISTEN worker on channel "moarchan_events".
 func (h *SSEHub) InitDBListener(db *sql.DB, connStr string) {
 	h.db = db
 	if connStr == "" {
@@ -88,6 +94,7 @@ func (h *SSEHub) InitDBListener(db *sql.DB, connStr string) {
 	}()
 }
 
+// Close terminates the PostgreSQL listener and stops the hub worker.
 func (h *SSEHub) Close() {
 	h.closeOnce.Do(func() {
 		close(h.stopChan)
@@ -97,6 +104,7 @@ func (h *SSEHub) Close() {
 	})
 }
 
+// Subscribe registers a subscriber channel for a given topic.
 func (h *SSEHub) Subscribe(topic string) chan SSEEvent {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -109,6 +117,7 @@ func (h *SSEHub) Subscribe(topic string) chan SSEEvent {
 	return ch
 }
 
+// Unsubscribe removes a subscriber channel from a given topic.
 func (h *SSEHub) Unsubscribe(topic string, ch chan SSEEvent) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -124,6 +133,7 @@ func (h *SSEHub) Unsubscribe(topic string, ch chan SSEEvent) {
 	}
 }
 
+// broadcastLocal pushes an event non-blockingly to all in-process channel subscribers.
 func (h *SSEHub) broadcastLocal(topic, event string, payload json.RawMessage) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -148,6 +158,7 @@ func (h *SSEHub) broadcastLocal(topic, event string, payload json.RawMessage) {
 	}
 }
 
+// Broadcast distributes an event cluster-wide via PostgreSQL NOTIFY or falls back to local dispatch.
 func (h *SSEHub) Broadcast(topic, event string, payload []byte) {
 	evt := SSEEvent{
 		Topic: topic,
@@ -193,6 +204,7 @@ func (h *SSEHub) Broadcast(topic, event string, payload []byte) {
 	h.broadcastLocal(topic, event, evt.Data)
 }
 
+// SSEHandler streams real-time Server-Sent Events to HTTP clients.
 func (app *App) SSEHandler(w http.ResponseWriter, r *http.Request) {
 	topic := r.URL.Query().Get("topic")
 	if topic == "" {

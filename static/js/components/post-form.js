@@ -1,12 +1,43 @@
+/**
+ * @fileoverview Post submission form component for creating new threads
+ * and replies.
+ */
+
 import dom from "../dom.js";
 import frame from "../frame.js";
 
-export default function createPostForm(global, config) {
+/**
+ * @typedef {Object} PostForm
+ * @property {() => void} clearForms
+ *     Clears input fields across post and reply forms.
+ * @property {(e: Event) => void} submitReplyQuick
+ *     Submits reply data from floating quick-reply modal.
+ * @property {() => void} cleanup
+ *     Unbinds form event listeners.
+ */
+
+/**
+ * Creates the post form handler for thread and reply creation.
+ *
+ * @param {Object} config - Component configuration parameters.
+ * @param {string} config.topic - The current board slug (e.g., 'g').
+ * @param {boolean} config.isThreadView - True if rendering inside a thread.
+ * @param {string} [config.threadHash] - Target thread hash if in thread view.
+ * @param {Function} [config.onSubmitted] - Post-submission callback.
+ * @returns {Readonly<PostForm>} Frozen post form controller.
+ */
+export default Object.freeze(function createPostForm(config) {
     const topic = config.topic;
     const isThreadView = config.isThreadView;
     const threadHash = config.threadHash;
     const onSubmitted = config.onSubmitted;
 
+    /**
+     * Toggles visibility of the top blotter banner section.
+     *
+     * @param {Event} [e] - Triggering click event.
+     * @returns {void}
+     */
     function toggleBlotter(e) {
         if (e && typeof e.preventDefault === "function") {
             e.preventDefault();
@@ -17,6 +48,12 @@ export default function createPostForm(global, config) {
         dom(".show-blotter-container").toggleClass("hide");
     }
 
+    /**
+     * Displays the new thread submission form.
+     *
+     * @param {Event} [e] - Triggering click event.
+     * @returns {void}
+     */
     function showNewPostForm(e) {
         if (e && typeof e.preventDefault === "function") {
             e.preventDefault();
@@ -25,6 +62,11 @@ export default function createPostForm(global, config) {
         dom(".new-post-form").removeClass("hide");
     }
 
+    /**
+     * Resets all post and reply form input values to empty strings.
+     *
+     * @returns {void}
+     */
     function clearForms() {
         [
             "#new-post-name",
@@ -45,6 +87,12 @@ export default function createPostForm(global, config) {
         }
     }
 
+    /**
+     * Validates and submits a new thread creation request.
+     *
+     * @param {Event} [e] - Triggering form submission event.
+     * @returns {void}
+     */
     function submitThread(e) {
         if (e && typeof e.preventDefault === "function") {
             e.preventDefault();
@@ -58,10 +106,12 @@ export default function createPostForm(global, config) {
         const files = (fileInput && fileInput.files) || [];
 
         if (files.length === 0) {
-            return global.alert("File required to create a new thread.");
+            return globalThis.alert("File required to create a new thread.");
         }
         if (files[0].size > 32 * 1024 * 1024) {
-            return global.alert("File exceeds maximum limit of 32 MB.");
+            return globalThis.alert(
+                "File exceeds maximum limit of 32 MB."
+            );
         }
 
         const fd = new FormData();
@@ -74,23 +124,32 @@ export default function createPostForm(global, config) {
         fd.append("file", files[0]);
 
         fetch("/api/threads", {
-            method: "POST",
             body: fd,
             headers: {
                 "X-CSRF-Token": frame.getCSRFToken()
-            }
+            },
+            method: "POST"
         })
             .then(function (res) {
                 if (!res.ok) {
-                    return res.text().then(function (msg) { global.alert(msg); });
+                    return res.text().then(function (msg) {
+                        globalThis.alert(msg);
+                    });
                 }
                 clearForms();
             })
             .catch(function (err) {
-                global.alert("Network error: " + err.message);
+                globalThis.alert("Network error: " + err.message);
             });
     }
 
+    /**
+     * Validates and submits a reply to an existing thread.
+     *
+     * @param {Event} [e] - Triggering event.
+     * @param {boolean} [fromQuickReply] - Whether submitted via quick reply.
+     * @returns {void}
+     */
     function submitReply(e, fromQuickReply) {
         if (e && typeof e.preventDefault === "function") {
             e.preventDefault();
@@ -100,10 +159,14 @@ export default function createPostForm(global, config) {
         if (fromQuickReply) {
             prefix = "#reply-box-";
             const boxThread = dom(".reply-box").data("thread");
-            targetThread = Array.isArray(boxThread) ? boxThread[0] : boxThread;
+            targetThread = (
+                Array.isArray(boxThread)
+                ? boxThread[0]
+                : boxThread
+            );
         }
         if (!targetThread) {
-            return global.alert("Unable to locate target thread ID.");
+            return globalThis.alert("Unable to locate target thread ID.");
         }
 
         const nameInput = dom(prefix + "name").get(0);
@@ -114,11 +177,13 @@ export default function createPostForm(global, config) {
         const comment = (commentInput && commentInput.value) || "";
 
         if (!comment.trim()) {
-            return global.alert("Comment is required to post a reply.");
+            return globalThis.alert("Comment is required to post a reply.");
         }
         const files = (fileInput && fileInput.files) || [];
         if (files.length > 0 && files[0].size > 8 * 1024 * 1024) {
-            return global.alert("File exceeds maximum allowed limit of 8 MB.");
+            return globalThis.alert(
+                "File exceeds maximum allowed limit of 8 MB."
+            );
         }
 
         const fd = new FormData();
@@ -133,44 +198,47 @@ export default function createPostForm(global, config) {
         }
 
         fetch("/api/replies", {
-            method: "POST",
             body: fd,
             headers: {
                 "X-CSRF-Token": frame.getCSRFToken()
-            }
+            },
+            method: "POST"
         })
             .then(function (res) {
                 if (!res.ok) {
-                    return res.text().then(function (msg) { global.alert(msg); });
+                    return res.text().then(function (msg) {
+                        globalThis.alert(msg);
+                    });
                 }
                 clearForms();
             })
             .catch(function (err) {
-                global.alert("Network error: " + err.message);
+                globalThis.alert("Network error: " + err.message);
             });
     }
 
-    // Attach listeners
     dom(".hide-blotter").on("click", toggleBlotter, false);
     dom(".show-blotter").on("click", toggleBlotter, false);
     dom(".new-post").on("click", showNewPostForm, false);
 
     if (isThreadView) {
-        dom("#new-post-button").on("click", function (e) { submitReply(e, false); }, false);
+        dom("#new-post-button").on("click", function (e) {
+            submitReply(e, false);
+        }, false);
     } else {
         dom("#new-post-button").on("click", submitThread, false);
     }
 
     return Object.freeze({
-        clearForms,
-        submitReplyQuick: function (e) {
-            submitReply(e, true);
-        },
         cleanup: function () {
             dom(".hide-blotter").off("click", toggleBlotter, false);
             dom(".show-blotter").off("click", toggleBlotter, false);
             dom(".new-post").off("click", showNewPostForm, false);
             dom("#new-post-button").off("click");
+        },
+        clearForms,
+        submitReplyQuick: function (e) {
+            submitReply(e, true);
         }
     });
-}
+});

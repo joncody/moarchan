@@ -1,7 +1,23 @@
+/**
+ * @fileoverview Main homepage controller managing disclaimer consent
+ * and user sessions.
+ */
+
 import dom from "../dom.js";
 import frame from "../frame.js";
 
-frame.controllers.main = function main(global) {
+/**
+ * Controller for the homepage index view.
+ *
+ * @returns {function(): void} Teardown function to unbind DOM events.
+ */
+frame.controllers.main = function main() {
+    /**
+     * Handles disclaimer agreement and hides the disclaimer banner.
+     *
+     * @param {Event} [e] - Click event object.
+     * @returns {void}
+     */
     function agreeDisclaimer(e) {
         if (e && typeof e.preventDefault === "function") {
             e.preventDefault();
@@ -9,6 +25,12 @@ frame.controllers.main = function main(global) {
         dom(".disclaimer-container").addClass("hide");
     }
 
+    /**
+     * Closes the disclaimer banner.
+     *
+     * @param {Event} [e] - Click event object.
+     * @returns {void}
+     */
     function closeDisclaimer(e) {
         if (e && typeof e.preventDefault === "function") {
             e.preventDefault();
@@ -16,18 +38,24 @@ frame.controllers.main = function main(global) {
         dom(".disclaimer-container").addClass("hide");
     }
 
+    /**
+     * Submits a logout request and refreshes the current window.
+     *
+     * @param {Event} [e] - Click event object.
+     * @returns {void}
+     */
     function handleLogout(e) {
         if (e && typeof e.preventDefault === "function") {
             e.preventDefault();
         }
         fetch("/logout", {
-            method: "POST",
             headers: {
-                "X-Requested-With": "XMLHttpRequest",
-                "X-CSRF-Token": frame.getCSRFToken()
-            }
+                "X-CSRF-Token": frame.getCSRFToken(),
+                "X-Requested-With": "XMLHttpRequest"
+            },
+            method: "POST"
         }).then(function () {
-            global.location.reload();
+            globalThis.location.reload();
         }).catch(function (err) {
             console.error("Logout request failed:", err);
         });

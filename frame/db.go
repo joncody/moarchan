@@ -1,3 +1,5 @@
+// Package frame provides a decoupled web framework featuring session management,
+// dynamic routing, database KV helpers, and Server-Sent Events (SSE).
 package frame
 
 import (
@@ -10,18 +12,23 @@ import (
 	"strings"
 )
 
+// validTableNameRegex ensures that table names contain only alphanumeric characters and underscores.
 var validTableNameRegex = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
 
+// defaultMaxRows specifies the fallback limit for multi-row queries.
 const defaultMaxRows = 1000
 
+// systemTables maps reserved table names that are blocked from direct KV manipulation.
 var systemTables = map[string]bool{
 	"auth": true,
 }
 
+// IsValidTableName verifies that a table identifier adheres to strict character whitelist rules.
 func IsValidTableName(name string) bool {
 	return validTableNameRegex.MatchString(name)
 }
 
+// IsSystemTable returns true if the table is reserved or belongs to PostgreSQL catalog schemas.
 func IsSystemTable(table string) bool {
 	lower := strings.ToLower(table)
 	if systemTables[lower] {
@@ -30,6 +37,7 @@ func IsSystemTable(table string) bool {
 	return strings.HasPrefix(lower, "pg_") || strings.HasPrefix(lower, "information_schema")
 }
 
+// EnsureTable lazily creates the key-value document table if it does not yet exist.
 func (app *App) EnsureTable(ctx context.Context, table string) error {
 	if _, loaded := app.knownTables.Load(table); loaded {
 		return nil
@@ -52,6 +60,7 @@ CREATE TABLE IF NOT EXISTS "%s" (
 	return nil
 }
 
+// PrepareTables initializes the primary auth table and all static route tables registered on boot.
 func (app *App) PrepareTables(ctx context.Context) error {
 	const initSchema = `
 CREATE TABLE IF NOT EXISTS auth (
@@ -76,6 +85,7 @@ CREATE TABLE IF NOT EXISTS auth (
 	return nil
 }
 
+// ExecTx executes a function within a database transaction, automatically rolling back on failure.
 func (app *App) ExecTx(ctx context.Context, fn func(*sql.Tx) error) error {
 	tx, err := app.Driver.BeginTx(ctx, nil)
 	if err != nil {
@@ -119,6 +129,7 @@ func (app *App) GetRow(ctx context.Context, table, key string) (map[string]inter
 	return result, nil
 }
 
+// GetRowStruct retrieves a single JSONB document and decodes it directly into the provided destination struct.
 func (app *App) GetRowStruct(ctx context.Context, table, key string, dest interface{}) error {
 	if err := app.EnsureTable(ctx, table); err != nil {
 		return err
@@ -138,10 +149,12 @@ func (app *App) GetRowStruct(ctx context.Context, table, key string, dest interf
 	return nil
 }
 
+// GetRows retrieves all rows from the specified key-value table up to defaultMaxRows.
 func (app *App) GetRows(ctx context.Context, table string) ([]map[string]interface{}, error) {
 	return app.GetRowsPaginated(ctx, table, defaultMaxRows, 0)
 }
 
+// GetRowsPaginated retrieves paginated JSONB rows from the specified table ordered by ID descending.
 func (app *App) GetRowsPaginated(ctx context.Context, table string, limit, offset int) ([]map[string]interface{}, error) {
 	if err := app.EnsureTable(ctx, table); err != nil {
 		return nil, err
@@ -177,6 +190,7 @@ func (app *App) GetRowsPaginated(ctx context.Context, table string, limit, offse
 	return results, nil
 }
 
+// InsertRow upserts a JSONB document into the specified table using ON CONFLICT (key) DO UPDATE.
 func (app *App) InsertRow(ctx context.Context, table, key string, value interface{}) error {
 	if err := app.EnsureTable(ctx, table); err != nil {
 		return err
@@ -205,6 +219,7 @@ ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
 	return nil
 }
 
+// DeleteRow deletes a document by key from the specified table.
 func (app *App) DeleteRow(ctx context.Context, table, key string) error {
 	if err := app.EnsureTable(ctx, table); err != nil {
 		return err

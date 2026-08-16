@@ -1,3 +1,5 @@
+// Package main implements the domain-specific database queries, schema migrations,
+// and relational data providers for MoarChan.
 package main
 
 import (
@@ -12,12 +14,12 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// InitMoarchanSchema applies all domain schema migrations using the
-// versioned migration system. Each migration runs exactly once and is
-// recorded in the schema_migrations table, preventing the fragile
-// re-execution of UPDATE backfills on every startup.
+// InitMoarchanSchema applies all domain schema migrations using the versioned
+// migration system in frame. Each migration executes within an atomic transaction
+// and is recorded in the schema_migrations table, preventing repetitive and expensive
+// table alterations or data backfills on subsequent application boots.
 func InitMoarchanSchema(ctx context.Context, app *frame.App) error {
-	// Migration 001: Create boards table
+	// Migration 001: Create boards table for board slug routing
 	if err := app.RunMigration(ctx, "001_create_boards", "Create boards table", func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `
 CREATE TABLE IF NOT EXISTS boards (
@@ -54,7 +56,7 @@ CREATE TABLE IF NOT EXISTS threads (
 		return fmt.Errorf("migration 002: %w", err)
 	}
 
-	// Migration 003: Create posts table
+	// Migration 003: Create posts table for thread replies
 	if err := app.RunMigration(ctx, "003_create_posts", "Create posts table", func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `
 CREATE TABLE IF NOT EXISTS posts (
@@ -80,7 +82,7 @@ CREATE TABLE IF NOT EXISTS posts (
 		return fmt.Errorf("migration 003: %w", err)
 	}
 
-	// Migration 004: Add password_hash to threads (non-destructive)
+	// Migration 004: Add password_hash to threads for legacy schema compatibility
 	if err := app.RunMigration(ctx, "004_threads_password_hash", "Add password_hash column to threads", func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `ALTER TABLE threads ADD COLUMN IF NOT EXISTS password_hash TEXT;`)
 		return err
@@ -88,7 +90,7 @@ CREATE TABLE IF NOT EXISTS posts (
 		return fmt.Errorf("migration 004: %w", err)
 	}
 
-	// Migration 005: Add bumped_at to threads and backfill
+	// Migration 005: Add bumped_at to threads and backfill timestamp from created_at
 	if err := app.RunMigration(ctx, "005_threads_bumped_at", "Add bumped_at column and backfill from created_at", func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, `ALTER TABLE threads ADD COLUMN IF NOT EXISTS bumped_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;`); err != nil {
 			return err
@@ -99,7 +101,7 @@ CREATE TABLE IF NOT EXISTS posts (
 		return fmt.Errorf("migration 005: %w", err)
 	}
 
-	// Migration 006: Add password_hash to posts (non-destructive)
+	// Migration 006: Add password_hash to posts for legacy schema compatibility
 	if err := app.RunMigration(ctx, "006_posts_password_hash", "Add password_hash column to posts", func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `ALTER TABLE posts ADD COLUMN IF NOT EXISTS password_hash TEXT;`)
 		return err
@@ -107,7 +109,7 @@ CREATE TABLE IF NOT EXISTS posts (
 		return fmt.Errorf("migration 006: %w", err)
 	}
 
-	// Migration 007: Create indexes
+	// Migration 007: Create performance indexes for feed sorting and cascade lookups
 	if err := app.RunMigration(ctx, "007_create_indexes", "Create performance indexes", func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_threads_topic_bumped ON threads(topic, bumped_at DESC);`); err != nil {
 			return err
@@ -121,6 +123,9 @@ CREATE TABLE IF NOT EXISTS posts (
 	return nil
 }
 
+// MoarchanDataProvider serves as the custom DataProvider hook for the frame
+// router. It translates dynamic route match parameters into database queries,
+// returning either a single thread with all replies or a list of active board threads.
 func MoarchanDataProvider(ctx context.Context, app *frame.App, cfg frame.RouteConfig, subs []string) (interface{}, error) {
 	topic := resolveSub(cfg.Table, subs)
 	key := resolveSub(cfg.Key, subs)
@@ -135,6 +140,7 @@ func MoarchanDataProvider(ctx context.Context, app *frame.App, cfg frame.RouteCo
 	return GetTopicThreads(ctx, app.Driver, topic)
 }
 
+// resolveSub extracts indexed regex capture groups (e.g., "$1", "$2") from matched route URLs.
 func resolveSub(field string, subs []string) string {
 	if len(field) > 1 && field[0] == '$' {
 		idx := int(field[1] - '0')
@@ -145,6 +151,8 @@ func resolveSub(field string, subs []string) string {
 	return field
 }
 
+// GetTopicThreads queries the most recently bumped 100 threads for a given topic board.
+// Replies are aggregated directly in PostgreSQL using jsonb_agg to eliminate N+1 query overhead.
 func GetTopicThreads(ctx context.Context, db *sql.DB, topic string) ([]map[string]interface{}, error) {
 	const query = `
 SELECT
@@ -222,6 +230,8 @@ LIMIT 100
 	return results, nil
 }
 
+// GetSingleThread retrieves a specific thread by topic and hash, including all replies
+// ordered chronologically by ascending ID.
 func GetSingleThread(ctx context.Context, db *sql.DB, topic, threadHash string) (map[string]interface{}, error) {
 	const query = `
 SELECT
@@ -289,6 +299,7 @@ GROUP BY t.id, t.hash
 	}, nil
 }
 
+// GetSinglePost retrieves an individual reply post by its unique hash.
 func GetSinglePost(ctx context.Context, db *sql.DB, hash string) (map[string]interface{}, error) {
 	const query = `
 SELECT
@@ -335,6 +346,8 @@ WHERE p.hash = $1
 	}, nil
 }
 
+// DeletedPostInfo encapsulates metadata regarding deleted posts and associated media files
+// so that corresponding physical files can be purged from storage.
 type DeletedPostInfo struct {
 	Hash      string
 	Topic     string
@@ -342,6 +355,10 @@ type DeletedPostInfo struct {
 	FileNames []string
 }
 
+// DeletePostOrFile handles authenticated post and attachment deletions.
+// It verifies bcrypt passwords (or admin session overrides), determines whether the
+// target is an OP thread or reply, and executes either a metadata clear (fileOnly)
+// or cascade record deletion within a database transaction.
 func DeletePostOrFile(ctx context.Context, db *sql.DB, hash, password string, isAdmin, fileOnly bool) (*DeletedPostInfo, error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -387,6 +404,7 @@ func DeletePostOrFile(ctx context.Context, db *sql.DB, hash, password string, is
 	}
 
 	if fileOnly {
+		// Clear file metadata while preserving the post text
 		if isThread {
 			_, err = tx.ExecContext(ctx, `UPDATE threads SET file_name = '', file_mime = '', file_size = '', file_dimensions = '' WHERE hash = $1`, hash)
 		} else {

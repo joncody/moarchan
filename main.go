@@ -1,3 +1,5 @@
+// Package main is the entry point for the MoarChan web service. It coordinates
+// image processing, REST endpoints, real-time Server-Sent Events (SSE), and routing.
 package main
 
 import (
@@ -26,15 +28,20 @@ import (
 	"moarchan/frame"
 )
 
+// Global application container.
 var app *frame.App
 
+// tagRegex matches post reference links (e.g. ">>a1b2c3d4e").
 var tagRegex = regexp.MustCompile(`&gt;&gt;([A-Za-z0-9]+)`)
 
 const (
+	// MaxImageDimension defines the maximum allowed pixel width or height to prevent decompression bombs.
 	MaxImageDimension = 10000
-	MaxUploadSize     = 32 << 20 // 32MB form limit
+	// MaxUploadSize defines the maximum multipart form memory limit (32MB).
+	MaxUploadSize = 32 << 20
 )
 
+// Thread represents an original post (OP) and its associated replies.
 type Thread struct {
 	Hash           string   `json:"hash"`
 	Topic          string   `json:"topic"`
@@ -52,6 +59,7 @@ type Thread struct {
 	Tagging        []string `json:"tagging"`
 }
 
+// Reply represents an individual response within a thread.
 type Reply struct {
 	Hash           string   `json:"hash"`
 	Thread         string   `json:"thread"`
@@ -68,6 +76,7 @@ type Reply struct {
 	Tagging        []string `json:"tagging"`
 }
 
+// FileDetails encapsulates metadata for an uploaded and processed image attachment.
 type FileDetails struct {
 	Name       string
 	Path       string
@@ -76,6 +85,7 @@ type FileDetails struct {
 	Dimensions string
 }
 
+// sanitizeComment escapes HTML, formats greentext quotes, and transforms >>hash references into clickable tags.
 func sanitizeComment(raw string) (string, []string) {
 	escaped := html.EscapeString(raw)
 	escaped = strings.ReplaceAll(escaped, "\r\n", "\n")
@@ -85,11 +95,14 @@ func sanitizeComment(raw string) (string, []string) {
 	formattedLines := make([]string, 0, len(lines))
 
 	for _, line := range lines {
+		// Format post quotation links (>>hash)
 		formattedLine := tagRegex.ReplaceAllStringFunc(line, func(match string) string {
 			postHash := match[8:] // strip &gt;&gt;
 			tags = append(tags, postHash)
 			return fmt.Sprintf(`<span class="post-tag blue-text-link" data-tag="%s">%s</span>`, postHash, match)
 		})
+
+		// Format greentext lines (>quote)
 		if strings.HasPrefix(formattedLine, "&gt;") && !strings.HasPrefix(formattedLine, "&gt;&gt;") {
 			formattedLine = fmt.Sprintf(`<span class="post-quote">%s</span>`, formattedLine)
 		}
@@ -132,6 +145,8 @@ func createThumbnail(src image.Image, maxW, maxH int) image.Image {
 	return dst
 }
 
+// processMultipartUpload validates, strips metadata from, and generates thumbnails for uploaded images.
+// It persists files via the Storage abstraction and cleans up orphaned files if thumbnail generation fails.
 func processMultipartUpload(ctx context.Context, fileHeader *multipart.FileHeader, uniqueID string) (*FileDetails, error) {
 	if fileHeader == nil {
 		return &FileDetails{}, nil
@@ -240,6 +255,7 @@ func processMultipartUpload(ctx context.Context, fileHeader *multipart.FileHeade
 	}, nil
 }
 
+// generateUnique generates a human-readable 4chan timestamp and a cryptographic 9-character hexadecimal hash.
 func generateUnique() (string, string) {
 	now := time.Now()
 	timestamp := fmt.Sprintf(
@@ -260,6 +276,7 @@ func generateUnique() (string, string) {
 	return timestamp, hash
 }
 
+// hashPostPassword creates a bcrypt hash for post deletion passwords.
 func hashPostPassword(pwd string) (string, error) {
 	if pwd == "" {
 		return "", nil
@@ -268,6 +285,7 @@ func hashPostPassword(pwd string) (string, error) {
 	return string(h), err
 }
 
+// handleCreateThread processes HTTP POST requests to create a new thread with mandatory image attachment.
 func handleCreateThread(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseMultipartForm(MaxUploadSize); err != nil {
 		http.Error(w, "Multipart form parse error or size limit exceeded", http.StatusBadRequest)
@@ -362,6 +380,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 	w.Write(ssePayload)
 }
 
+// handleCreateReply processes HTTP POST requests to reply to an existing thread.
 func handleCreateReply(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseMultipartForm(MaxUploadSize); err != nil {
 		http.Error(w, "Multipart form parse error or size limit exceeded", http.StatusBadRequest)
@@ -440,7 +459,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		return
 	}
 
-	// Bump thread unless "sage" is in options
+	// Bump thread timestamp unless "sage" is in options
 	if !strings.Contains(strings.ToLower(rawOpt), "sage") {
 		_, _ = tx.ExecContext(ctx, `UPDATE threads SET bumped_at = CURRENT_TIMESTAMP WHERE hash = $1`, threadHash)
 	}
@@ -486,6 +505,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 	w.Write(ssePayload)
 }
 
+// handleDeletePost processes HTTP POST requests to delete posts or attachments using password verification.
 func handleDeletePost(w http.ResponseWriter, r *http.Request) {
 	hash := strings.TrimSpace(r.FormValue("hash"))
 	password := strings.TrimSpace(r.FormValue("password"))
@@ -537,6 +557,8 @@ func handleDeletePost(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ResolveAndRenderEvent handles on-demand data hydration and HTML template rendering
+// for compact SSE messages distributed via PostgreSQL pg_notify.
 func ResolveAndRenderEvent(ctx context.Context, a *frame.App, topic, event string, rawData []byte) ([]byte, error) {
 	var meta map[string]interface{}
 	if err := json.Unmarshal(rawData, &meta); err != nil {

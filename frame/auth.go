@@ -1,3 +1,5 @@
+// Package frame provides a decoupled web framework featuring session management,
+// dynamic routing, database KV helpers, and Server-Sent Events (SSE).
 package frame
 
 import (
@@ -14,17 +16,20 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// Auth stores a user's hashed password and assigned access privilege.
 type Auth struct {
 	PasswordHash string `json:"password_hash"`
 	Privilege    string `json:"privilege"`
 }
 
+// privilegeUser represents the default access tier for registered members.
 const privilegeUser = "user"
 
-// Pre-computed dummy hash to enforce constant-time execution during lookup failures.
+// dummyHash is a pre-computed bcrypt hash used to enforce constant-time execution
+// during authentication lookups for non-existent users, mitigating timing-based user enumeration.
 const dummyHash = "$2a$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUU123456"
 
-// validateAlias checks if an alias meets format requirements.
+// validateAlias checks if an alias conforms to length (3-64 characters) and allowed character constraints.
 func validateAlias(alias string) bool {
 	if len(alias) < 3 || len(alias) > 64 {
 		return false
@@ -42,7 +47,7 @@ func validateAlias(alias string) bool {
 	return true
 }
 
-// IsAliasAvailable returns true if the alias is not taken.
+// IsAliasAvailable returns true if the username is not currently registered.
 func (app *App) IsAliasAvailable(ctx context.Context, alias string) (bool, error) {
 	var exists bool
 	err := app.Driver.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM auth WHERE key = $1)`, alias).Scan(&exists)
@@ -52,7 +57,7 @@ func (app *App) IsAliasAvailable(ctx context.Context, alias string) (bool, error
 	return !exists, nil
 }
 
-// CreateUser hashes the password and inserts a new user into the auth table.
+// CreateUser hashes the given password using bcrypt and stores the new user credentials in the auth table.
 func (app *App) CreateUser(ctx context.Context, alias, password string) (*Auth, error) {
 	if len(password) < 8 || len(password) > 72 {
 		return nil, errors.New("password must be between 8 and 72 characters")
@@ -79,7 +84,7 @@ func (app *App) CreateUser(ctx context.Context, alias, password string) (*Auth, 
 	return auth, nil
 }
 
-// VerifyCredentials validates alias/password using constant-time checks to prevent user enumeration.
+// VerifyCredentials validates an alias and password combination in constant time to prevent user enumeration attacks.
 func (app *App) VerifyCredentials(ctx context.Context, alias, password string) (*Auth, error) {
 	if len(password) == 0 || len(password) > 72 {
 		return nil, errors.New("invalid alias or password")
@@ -113,6 +118,7 @@ func (app *App) VerifyCredentials(ctx context.Context, alias, password string) (
 
 // ———————— HTTP Handlers ————————
 
+// Register handles user registration HTTP POST requests.
 func (app *App) Register(w http.ResponseWriter, r *http.Request) {
 	alias := strings.TrimSpace(r.FormValue("alias"))
 	password := r.FormValue("password")
@@ -136,6 +142,7 @@ func (app *App) Register(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// Login handles user authentication HTTP POST requests.
 func (app *App) Login(w http.ResponseWriter, r *http.Request) {
 	alias := strings.TrimSpace(r.FormValue("alias"))
 	password := r.FormValue("password")
@@ -159,6 +166,7 @@ func (app *App) Login(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// Logout terminates the user's session and clears the encrypted cookie.
 func (app *App) Logout(w http.ResponseWriter, r *http.Request) {
 	if err := app.clearSession(w, r); err != nil {
 		log.Printf("Session clear error: %v", err)
