@@ -100,7 +100,7 @@ func resolveSub(field string, subs []string) string {
 func GetTopicThreads(ctx context.Context, db *sql.DB, topic string) ([]map[string]interface{}, error) {
 	const query = `
 		SELECT 
-			t.hash, t.topic, t.name, t.subject, t.options, t.comment,
+			t.hash, t.topic, t.name, COALESCE(t.subject, ''), COALESCE(t.options, ''), t.comment,
 			t.file_name, t.file_mime, t.file_size, t.file_dimensions, t.timestamp,
 			COALESCE(
 				jsonb_agg(
@@ -109,7 +109,7 @@ func GetTopicThreads(ctx context.Context, db *sql.DB, topic string) ([]map[strin
 						'thread', p.thread_hash,
 						'topic', p.topic,
 						'name', p.name,
-						'options', p.options,
+						'options', COALESCE(p.options, ''),
 						'comment', p.comment,
 						'file_name', COALESCE(p.file_name, ''),
 						'file_mime', COALESCE(p.file_mime, ''),
@@ -125,7 +125,7 @@ func GetTopicThreads(ctx context.Context, db *sql.DB, topic string) ([]map[strin
 		FROM threads t
 		LEFT JOIN posts p ON t.hash = p.thread_hash
 		WHERE t.topic = $1
-		GROUP BY t.id, t.hash
+		GROUP BY t.id, t.hash, t.bumped_at
 		ORDER BY t.bumped_at DESC
 		LIMIT 100
 	`
@@ -177,7 +177,7 @@ func GetTopicThreads(ctx context.Context, db *sql.DB, topic string) ([]map[strin
 func GetSingleThread(ctx context.Context, db *sql.DB, topic, threadHash string) (map[string]interface{}, error) {
 	const query = `
 		SELECT 
-			t.hash, t.topic, t.name, t.subject, t.options, t.comment,
+			t.hash, t.topic, t.name, COALESCE(t.subject, ''), COALESCE(t.options, ''), t.comment,
 			t.file_name, t.file_mime, t.file_size, t.file_dimensions, t.timestamp,
 			COALESCE(
 				jsonb_agg(
@@ -186,7 +186,7 @@ func GetSingleThread(ctx context.Context, db *sql.DB, topic, threadHash string) 
 						'thread', p.thread_hash,
 						'topic', p.topic,
 						'name', p.name,
-						'options', p.options,
+						'options', COALESCE(p.options, ''),
 						'comment', p.comment,
 						'file_name', COALESCE(p.file_name, ''),
 						'file_mime', COALESCE(p.file_mime, ''),
@@ -238,6 +238,52 @@ func GetSingleThread(ctx context.Context, db *sql.DB, topic, threadHash string) 
 		"replies":         replies,
 		"taggedBy":        []string{},
 		"tagging":         []string{},
+	}, nil
+}
+
+func GetSinglePost(ctx context.Context, db *sql.DB, hash string) (map[string]interface{}, error) {
+	const query = `
+		SELECT 
+			p.hash, p.thread_hash, p.topic, p.name, COALESCE(p.options, ''), p.comment,
+			COALESCE(p.file_name, ''), COALESCE(p.file_mime, ''), COALESCE(p.file_size, ''), COALESCE(p.file_dimensions, ''),
+			p.timestamp, p.tagging, p.tagged_by
+		FROM posts p
+		WHERE p.hash = $1
+	`
+	var postHash, threadHash, topic, name, options, comment, fileName, fileMime, fileSize, fileDims, timestamp string
+	var taggingRaw, taggedByRaw []byte
+
+	err := db.QueryRowContext(ctx, query, hash).Scan(
+		&postHash, &threadHash, &topic, &name, &options, &comment,
+		&fileName, &fileMime, &fileSize, &fileDims, &timestamp,
+		&taggingRaw, &taggedByRaw,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query single post %q: %w", hash, err)
+	}
+
+	var tagging, taggedBy []string
+	if err := json.Unmarshal(taggingRaw, &tagging); err != nil {
+		tagging = []string{}
+	}
+	if err := json.Unmarshal(taggedByRaw, &taggedBy); err != nil {
+		taggedBy = []string{}
+	}
+
+	return map[string]interface{}{
+		"hash":            postHash,
+		"thread":          threadHash,
+		"topic":           topic,
+		"name":            name,
+		"options":         options,
+		"comment":         comment,
+		"file_name":       fileName,
+		"file_mime":       fileMime,
+		"file_size":       fileSize,
+		"file_dimensions": fileDims,
+		"timestamp":       timestamp,
+		"tagging":         tagging,
+		"taggedBy":        taggedBy,
 	}, nil
 }
 

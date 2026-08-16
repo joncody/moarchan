@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -355,6 +356,13 @@ func handleCreateThread(w http.ResponseWriter, r *http.Request) {
 		"tagging":         []string{},
 	}
 
+	var buf bytes.Buffer
+	if err := app.Templates.ExecuteTemplate(&buf, "thread-item", threadPayload); err != nil {
+		log.Printf("Execute template thread error: %v", err)
+	} else {
+		threadPayload["html"] = buf.String()
+	}
+
 	ssePayload, err := json.Marshal(threadPayload)
 	if err != nil {
 		http.Error(w, "Serialization error", http.StatusInternalServerError)
@@ -472,6 +480,13 @@ func handleCreateReply(w http.ResponseWriter, r *http.Request) {
 		"tagging":         tags,
 	}
 
+	var buf bytes.Buffer
+	if err := app.Templates.ExecuteTemplate(&buf, "reply-item", replyPayload); err != nil {
+		log.Printf("Execute template reply error: %v", err)
+	} else {
+		replyPayload["html"] = buf.String()
+	}
+
 	ssePayload, err := json.Marshal(replyPayload)
 	if err != nil {
 		http.Error(w, "Serialization error", http.StatusInternalServerError)
@@ -532,6 +547,50 @@ func handleDeletePost(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func ResolveAndRenderEvent(ctx context.Context, a *frame.App, topic, event string, rawData []byte) ([]byte, error) {
+	var meta map[string]interface{}
+	if err := json.Unmarshal(rawData, &meta); err != nil {
+		return rawData, nil
+	}
+
+	// If HTML is already rendered in the payload, no resolution needed
+	if htmlVal, exists := meta["html"]; exists && htmlVal != nil && htmlVal != "" {
+		return rawData, nil
+	}
+
+	// If marked with fetch (due to pg_notify size limit in multi-node clusters), fetch and render
+	hash, _ := meta["hash"].(string)
+	if hash == "" {
+		return rawData, nil
+	}
+
+	switch event {
+	case "new-thread":
+		threadData, err := GetSingleThread(ctx, a.Driver, topic, hash)
+		if err != nil {
+			return rawData, err
+		}
+		var buf bytes.Buffer
+		if err := a.Templates.ExecuteTemplate(&buf, "thread-item", threadData); err == nil {
+			threadData["html"] = buf.String()
+		}
+		return json.Marshal(threadData)
+
+	case "new-reply":
+		replyData, err := GetSinglePost(ctx, a.Driver, hash)
+		if err != nil {
+			return rawData, err
+		}
+		var buf bytes.Buffer
+		if err := a.Templates.ExecuteTemplate(&buf, "reply-item", replyData); err == nil {
+			replyData["html"] = buf.String()
+		}
+		return json.Marshal(replyData)
+	}
+
+	return rawData, nil
+}
+
 func main() {
 	var err error
 	app, err = frame.NewApp()
@@ -579,7 +638,12 @@ func main() {
 		log.Fatalf("Failed to initialize moarchan schema: %v", err)
 	}
 
-	// 4. REST Endpoints (Go 1.22+ Native Method Routing)
+	// 4. Cluster-Safe SSE Event Resolver
+	app.Hub.EventResolver = func(resolverCtx context.Context, topic, event string, rawData []byte) ([]byte, error) {
+		return ResolveAndRenderEvent(resolverCtx, app, topic, event, rawData)
+	}
+
+	// 5. REST Endpoints (Go 1.22+ Native Method Routing)
 	app.Router.HandleFunc("POST /api/threads", handleCreateThread)
 	app.Router.HandleFunc("POST /api/replies", handleCreateReply)
 	app.Router.HandleFunc("POST /api/posts/delete", handleDeletePost)

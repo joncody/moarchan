@@ -1,6 +1,7 @@
 package frame
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -18,13 +19,16 @@ type SSEEvent struct {
 	Data  json.RawMessage `json:"data"`
 }
 
+type EventResolver func(ctx context.Context, topic, event string, rawData []byte) ([]byte, error)
+
 type SSEHub struct {
-	mu          sync.RWMutex
-	subscribers map[string]map[chan SSEEvent]bool
-	db          *sql.DB
-	listener    *pq.Listener
-	stopChan    chan struct{}
-	closeOnce   sync.Once
+	mu            sync.RWMutex
+	subscribers   map[string]map[chan SSEEvent]bool
+	db            *sql.DB
+	listener      *pq.Listener
+	stopChan      chan struct{}
+	closeOnce     sync.Once
+	EventResolver EventResolver
 }
 
 func NewSSEHub() *SSEHub {
@@ -69,7 +73,15 @@ func (h *SSEHub) InitDBListener(db *sql.DB, connStr string) {
 
 				var evt SSEEvent
 				if err := json.Unmarshal([]byte(notification.Extra), &evt); err == nil {
-					h.broadcastLocal(evt.Topic, evt.Event, evt.Data)
+					payload := evt.Data
+					if h.EventResolver != nil {
+						ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+						if resolved, err := h.EventResolver(ctx, evt.Topic, evt.Event, payload); err == nil && len(resolved) > 0 {
+							payload = json.RawMessage(resolved)
+						}
+						cancel()
+					}
+					h.broadcastLocal(evt.Topic, evt.Event, payload)
 				}
 			}
 		}
@@ -145,6 +157,30 @@ func (h *SSEHub) Broadcast(topic, event string, payload []byte) {
 
 	notificationBytes, err := json.Marshal(evt)
 	if err == nil && h.db != nil {
+		// Postgres pg_notify hard limit is 8000 bytes.
+		// If payload exceeds safe threshold (7500 bytes), switch to compact fetch descriptor.
+		if len(notificationBytes) > 7500 {
+			var meta struct {
+				Hash    string `json:"hash"`
+				Thread  string `json:"thread"`
+				Options string `json:"options"`
+			}
+			_ = json.Unmarshal(payload, &meta)
+
+			compactPayload, _ := json.Marshal(map[string]interface{}{
+				"hash":    meta.Hash,
+				"thread":  meta.Thread,
+				"options": meta.Options,
+				"fetch":   true,
+			})
+			compactEvt := SSEEvent{
+				Topic: topic,
+				Event: event,
+				Data:  compactPayload,
+			}
+			notificationBytes, _ = json.Marshal(compactEvt)
+		}
+
 		// Broadcast across all cluster nodes using PostgreSQL pg_notify
 		_, notifyErr := h.db.Exec(`SELECT pg_notify('moarchan_events', $1)`, string(notificationBytes))
 		if notifyErr == nil {

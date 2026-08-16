@@ -1,7 +1,6 @@
 import dom from "../dom.js";
 import frame from "../frame.js";
 import topicsMap from "../components/topics-map.js";
-import renderer from "../components/post-renderer.js";
 import createTagHover from "../components/tag-hover.js";
 import createReplyBox from "../components/reply-box.js";
 import createPostActions from "../components/post-actions.js";
@@ -54,9 +53,8 @@ frame.controllers.service = function service(global) {
             return;
         }
         const boardEl = dom(".board").get(0);
-        if (boardEl) {
-            const html = data.html || renderer.renderThread(data);
-            boardEl.insertAdjacentHTML("afterbegin", html);
+        if (boardEl && data.html) {
+            boardEl.insertAdjacentHTML("afterbegin", data.html);
             const threadEl = dom("#post-" + data.hash);
             postActions.bindThreadEvents(threadEl);
             tagHover.bindTags();
@@ -69,9 +67,8 @@ frame.controllers.service = function service(global) {
             return;
         }
         const threadContainer = dom("#post-" + data.thread + " .thread-container");
-        if (threadContainer.length() > 0) {
-            const html = data.html || renderer.renderReply(data);
-            threadContainer.get(0).insertAdjacentHTML("beforeend", html);
+        if (threadContainer.length() > 0 && data.html) {
+            threadContainer.get(0).insertAdjacentHTML("beforeend", data.html);
             const replyEl = dom("#post-" + data.hash);
             postActions.bindReplyEvents(replyEl);
             tagHover.bindTags();
