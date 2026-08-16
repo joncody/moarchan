@@ -553,12 +553,12 @@ func ResolveAndRenderEvent(ctx context.Context, a *frame.App, topic, event strin
 		return rawData, nil
 	}
 
-	// If HTML is already rendered in the payload, no resolution needed
-	if htmlVal, exists := meta["html"]; exists && htmlVal != nil && htmlVal != "" {
+	// Explicitly check if a database fetch was requested
+	fetchRequired, _ := meta["fetch"].(bool)
+	if !fetchRequired {
 		return rawData, nil
 	}
 
-	// If marked with fetch (due to pg_notify size limit in multi-node clusters), fetch and render
 	hash, _ := meta["hash"].(string)
 	if hash == "" {
 		return rawData, nil
