@@ -7,52 +7,55 @@
 [![Docker Compose](https://img.shields.io/badge/Docker-Compose%20Ready-2496ED?style=flat&logo=docker&logoColor=white)](https://www.docker.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A high-performance, real-time 4chan clone built from scratch using **Rust**, **Axum**, **Tokio**, **HTTP/2**, **Server-Sent Events (SSE)**, **PostgreSQL (`LISTEN / NOTIFY`)**, and **Vanilla JavaScript** (strictly following Douglas Crockford's coding standards).
+A high-performance, real-time 4chan clone built from scratch using **Rust (2024 Edition)**, **Axum**, **Tokio**, **HTTP/2**, **Server-Sent Events (SSE)**, **PostgreSQL (`LISTEN / NOTIFY`)**, and **Vanilla JavaScript** (strictly following Douglas Crockford's coding standards).
 
 ---
 
 ## 🚀 Key Features
 
 * **HTTP/2 & Real-Time SSE Bus:** Multiplexed Server-Sent Events distributed horizontally across instances using PostgreSQL `LISTEN / NOTIFY` with compact JSON descriptors and database hydration fallback.
+* **Stream Backpressure & Lag Resilience:** Resilient broadcast channel handling catching Tokio stream lag to emit `sync-required` events, preventing silent socket disconnects on slow connections.
+* **Declarative AEAD Cookie Sessions:** Cryptographically sealed client sessions utilizing `axum-extra`'s `PrivateCookieJar` with 512-bit SHA-512 master key expansion and zero runtime database lookup overhead.
+* **Finite Board Capacity & Auto-Pruning:** Strictly enforced board limits (100 threads per board) with automated asynchronous cascade deletion of orphaned media files ($O(1)$ storage ceiling).
+* **Chronological Bumping & Bump Limit:** Real-time thread bumping with `bumped_at` timestamps, chronological reply ordering via PostgreSQL `jsonb_agg`, `sage` bypass, and an automated 300-reply bump limit.
+* **Classic & Secure Tripcode Engine:** Native parser for traditional (`#password`) and salted secure (`##password`) tripcodes with dedicated styling.
 * **Pluggable Storage Abstraction:** Abstracted `StorageBackend` trait supporting local disk storage and cloud object stores (S3, MinIO, GCS) with non-blocking concurrent file writes and atomic thumbnail rollbacks.
-* **High-Fidelity Fast Thumbnails:** High-performance integer downsampling using the `image` crate with strict dimension bomb defenses (10000x10000px validation) and EXIF metadata stripping.
+* **High-Fidelity Fast Thumbnails:** High-performance integer downsampling using the `image` crate with strict dimension bomb defenses (10000x10000px validation), magic-byte format verification, and EXIF metadata stripping.
 * **Zero-I/O Template Engine:** In-memory pre-cached MiniJinja template rendering compiled directly into RAM on startup for sub-millisecond page and item assembly.
 * **Transactional Versioned Migrations:** Robust, run-once schema migrations (`schema_migrations` tracking table) executing within atomic transactions, eliminating boot-time `UPDATE` backfill bottlenecks.
-* **Token-Bucket Rate Limiting:** In-memory IP-based token bucket rate limiter (2 req/sec, burst 10) applied to mutation endpoints (`POST`, `PUT`, `DELETE`) with HTTP 429 response handling via Tower middleware.
-* **Double-Submit CSRF Protection:** Timing-attack resistant CSRF middleware utilizing `subtle::ConstantTimeEq`, non-HttpOnly cookie distribution, and client-side `X-CSRF-Token` headers.
+* **IPv6 Subnet-Aware Rate Limiting:** Token-bucket IP rate limiter (2 req/sec, burst 10) with `/64` subnet masking to prevent rate-limit evasion through IPv6 address rotation.
+* **Double-Submit CSRF Protection:** Timing-attack resistant CSRF middleware utilizing `subtle::ConstantTimeEq`, non-HttpOnly cookie distribution, HTML meta injection, and client-side `X-CSRF-Token` validation.
 * **Pure Crockfordian JavaScript:** Modular client-side SPA runtime written with zero usage of `this`, `class`, `var`, `new` (in application code), or `void` operators.
 * **Componentized Frontend Architecture:** Decomposed into dedicated ES modules (`post-renderer`, `tag-hover`, `reply-box`, `post-actions`, `post-form`) with explicit lifecycle teardowns to prevent memory leaks.
 * **In-Place Image Expansion:** Clickable thumbnail expansion within the feed and thread views, with filename links directly opening raw full-resolution uploads in a new tab.
-* **Chronological Bumping & Sage:** Real-time thread bumping with `bumped_at` timestamps, chronological reply ordering via PostgreSQL `jsonb_agg`, and `sage` bypass support.
-* **HTML5 History API Routing:** Clean URLs (`/g`, `/g/thread/a1b2c3d4e`) with deep-linking support and History API client navigation.
-* **Decoupled Architecture:** Clean modular design with AEAD AES-256-GCM encrypted sessions, Tower middleware pipelines, typed routing, and an SSE event hub independent of domain logic.
-* **Protected Deletions & File Cleanup:** Post and file deletion secured with bcrypt password verification (or admin override), with automatic storage cleanup of orphaned cascade files.
-* **OWASP Hardened:** Includes Slowloris protection, XSS sanitization, timing-attack resistant password verification (`bcrypt`), and defensive security headers (`nosniff`, `DENY`, `mode=block`).
+* **HTML5 History API Routing:** Clean URLs (`/g`, `/g/thread/a1b2c3d4e`, static views) with deep-linking support and History API client navigation.
+* **Graceful Shutdown & Draining:** Integrated `SIGINT`/`SIGTERM` signal listening with active TCP connection draining for both cleartext and ALPN TLS HTTP/2 servers.
+* **OWASP Hardened:** Includes strict Content Security Policy (CSP), Slowloris protection, XSS sanitization, timing-attack resistant password verification (`bcrypt`), and defensive security headers (`nosniff`, `DENY`, `mode=block`).
 
 ---
 
 > **⚠️ Note on User Accounts / Authentication:**  
-> The login and registration system (`/auth`, `src/routes/auth.rs`) is included strictly as a **functional demonstration** of the session management, cookie encryption, and bcrypt capabilities. True to traditional imageboard culture, all board browsing, thread creation, and replying remain completely open, anonymous, and account-free by default.
+> The login and registration system (`/auth`, `src/routes/auth.rs`) is included strictly as a **functional demonstration** of the session management, private cookie encryption, and bcrypt capabilities. True to traditional imageboard culture, all board browsing, thread creation, and replying remain completely open, anonymous, and account-free by default.
 
 ---
 
 ## 🛠️ Tech Stack
 
 * **Backend:** Rust (2024 Edition)
-* **Web Framework:** [Axum 0.8](https://github.com/tokio-rs/axum) / [Tower](https://github.com/tower-rs/tower) / [Hyper 1.0](https://hyper.rs/)
+* **Web Framework:** [Axum 0.8](https://github.com/tokio-rs/axum) / [Axum-Extra 0.12](https://docs.rs/axum-extra) / [Tower](https://github.com/tower-rs/tower) / [Hyper 1.0](https://hyper.rs/)
 * **Async Runtime:** [Tokio](https://tokio.rs/)
 * **Database Driver:** [SQLx (PostgreSQL 16+)](https://github.com/launchbadge/sqlx)
 * **Template Engine:** [MiniJinja](https://github.com/mitsuhiko/minijinja) (In-Memory Pre-cached)
-* **Image Processing:** `image` crate (Fast integer downsampling)
+* **Image Processing:** `image` crate (Fast integer downsampling & magic-byte sniffing)
 * **Frontend:** Vanilla JavaScript (ES6 Modules, Crockfordian), HTML5, CSS3
 * **Protocol:** HTTP/2 over TLS (ALPN `h2`) / Cleartext HTTP / Server-Sent Events (SSE)
-* **Sessions:** Custom AEAD AES-256-GCM Encrypted Cookie Sessions (`src/services/session.rs`)
+* **Sessions:** AES-256-GCM Encrypted `PrivateCookieJar` (`axum-extra`)
 
 ---
 
 ## 📋 Prerequisites
 
-* **Rust** `1.80+` (Cargo)
+* **Rust** `1.85+` (Cargo)
 * **PostgreSQL** `16+` (or Docker)
 * **OpenSSL** (optional, for local HTTP/2 TLS certificates)
 
@@ -124,8 +127,8 @@ docker-compose up --build
 | `POSTGRES_PASSWORD` | `postgres` | PostgreSQL password |
 | `POSTGRES_DB` | `moarchan` | Database name |
 | `POSTGRES_SSLMODE` | `disable` | SSL mode (`disable`, `require`, `verify-full`) |
-| `SESSION_HASH_KEY` | *(32 bytes)* | Secret key for deriving session encryption key |
-| `SESSION_BLOCK_KEY` | *(32 bytes)* | Secret key for deriving session encryption key |
+| `SESSION_HASH_KEY` | *(32 bytes)* | Secret key for deriving session master key |
+| `SESSION_BLOCK_KEY` | *(32 bytes)* | Secret key for deriving session master key |
 | `UPLOAD_PATH` | `./static/images/uploads` | Local filesystem base path for media storage |
 | `UPLOAD_URL_PREFIX` | `/static/images/uploads` | Public URL prefix for uploaded media assets |
 | `VIEWS_PATH` | `./static/views` | Directory path containing HTML templates |
@@ -142,9 +145,9 @@ docker-compose up --build
 ├── docker-compose.yml    # Container orchestration setup
 ├── .env                  # Local environment configuration (git-ignored)
 ├── src/
-│   ├── main.rs           # Application bootstrap, template preloading & server launch
+│   ├── main.rs           # Application bootstrap, graceful shutdown & server launch
 │   ├── config.rs         # Environment variable configuration loader
-│   ├── state.rs          # Thread-safe global AppState container
+│   ├── state.rs          # Thread-safe global AppState & cookie key container
 │   ├── error.rs          # Unified error handling & HTTP response conversion
 │   ├── db/
 │   │   ├── mod.rs        # DB module entrypoint
@@ -153,29 +156,28 @@ docker-compose up --build
 │   ├── middleware/
 │   │   ├── mod.rs        # Middleware module entrypoint
 │   │   ├── csrf.rs       # Double-submit cookie CSRF middleware
-│   │   ├── rate_limit.rs # In-memory token-bucket IP rate limiter
-│   │   └── security.rs   # Defensive HTTP security headers
+│   │   ├── rate_limit.rs # IPv6 /64 subnet-aware token-bucket rate limiter
+│   │   └── security.rs   # Content Security Policy (CSP) & defensive headers
 │   ├── models/
 │   │   ├── mod.rs        # Models module entrypoint
-│   │   ├── auth.rs       # User authentication data structures
+│   │   ├── auth.rs       # User authentication & session models
 │   │   ├── post.rs       # Thread, Reply & File models
 │   │   └── sse.rs        # Event envelope models
 │   ├── routes/
 │   │   ├── mod.rs        # Master Axum router builder
-│   │   ├── auth.rs       # Login, registration & session handlers
+│   │   ├── auth.rs       # Login, registration & session handlers (PrivateCookieJar)
 │   │   ├── pages.rs      # HTML base shell & SPA dynamic render handlers
 │   │   └── api/
 │   │       ├── mod.rs    # API subrouter
-│   │       ├── threads.rs# Thread creation endpoint
-│   │       ├── replies.rs# Reply creation endpoint
+│   │       ├── threads.rs# Thread creation & auto-pruning endpoint
+│   │       ├── replies.rs# Reply creation & bump limit endpoint
 │   │       ├── delete.rs # Post/file deletion endpoint
-│   │       └── stream.rs # Real-time SSE stream endpoint
+│   │       └── stream.rs # Real-time SSE stream & lag recovery endpoint
 │   ├── services/
 │   │   ├── mod.rs        # Services module entrypoint
 │   │   ├── auth.rs       # Bcrypt password verification & hashing
-│   │   ├── image.rs      # High-performance thumbnailing & image processing
-│   │   ├── sanitizer.rs  # HTML escaping, greentext & post quote parsing
-│   │   ├── session.rs    # AES-256-GCM authenticated cookie session store
+│   │   ├── image.rs      # Thumbnailing, magic-byte checking & EXIF stripping
+│   │   ├── sanitizer.rs  # HTML escaping, tripcode engine & quote parsing
 │   │   └── sse.rs        # Distributed Postgres LISTEN/NOTIFY SSE hub
 │   └── storage/
 │       ├── mod.rs        # Pluggable StorageBackend trait
