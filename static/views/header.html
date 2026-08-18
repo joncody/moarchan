@@ -1,16 +1,14 @@
-{{ define "header" }}
-    <header class="moarchan-header">
-        <div class="moarchan-brand" data-href="/">
-            <img class="moarchan-clover" src="/static/images/moarchan-clover.png" alt="MoarChan" title="MoarChan" data-href="/" />
-            <h1 class="moarchan-text">MoarChan</h1>
-        </div>
-        <div class="header-auth-bar">
-            {{ if .alias }}
-                <span>Logged in as: <strong>{{ .alias }}</strong> ({{ .privilege }})</span>
-                [ <a href="#" data-action="logout" class="red-text-link">Logout</a> ]
-            {{ else }}
-                [ <a href="/auth" class="blue-text-link" data-href="/auth">Login / Register</a> ]
-            {{ end }}
-        </div>
-    </header>
-{{ end }}
+<header class="moarchan-header">
+    <div class="moarchan-brand" data-href="/">
+        <img class="moarchan-clover" src="/static/images/moarchan-clover.png" alt="MoarChan" title="MoarChan" data-href="/" />
+        <h1 class="moarchan-text">MoarChan</h1>
+    </div>
+    <div class="header-auth-bar">
+        {% if alias %}
+            <span>Logged in as: <strong>{{ alias }}</strong> ({{ privilege }})</span>
+            [ <a href="#" data-action="logout" class="red-text-link">Logout</a> ]
+        {% else %}
+            [ <a href="/auth" class="blue-text-link" data-href="/auth">Login / Register</a> ]
+        {% endif %}
+    </div>
+</header>

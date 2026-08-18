@@ -1,0 +1,1018 @@
+
+
+---------- FILE: ./about.html ----------
+
+<div class="page">
+    {% include "header.html" %}
+    <div class="pink-section">
+        <div class="header-container">
+            <h3 class="box-header pink-header">About</h3>
+        </div>
+        <p class="box-message">
+            MoarChan is a high-performance imageboard built with Rust, Axum, and HTTP/2.
+        </p>
+    </div>
+    {% include "main-footer.html" %}
+</div>
+
+
+---------- FILE: ./advertise.html ----------
+
+<div class="page">
+    {% include "header.html" %}
+    <div class="pink-section">
+        <div class="header-container">
+            <h3 class="box-header pink-header">Advertise</h3>
+        </div>
+        <p id="advertise-box-message" class="box-message">
+            moarchan is the original and largest English-language image board with over 22 million monthly visitors worldwide. Our boards cover a wide array of interests, including Video Games, Anime, Television, Film, Comics, Technology, Fitness, and Cars. Advertisers have the option of displaying their ads across the entire site for huge reach, or picking and choosing boards to target their audience's interests.<br />
+            We offer managed campaigns on a CPM or flat rate basis. Our managed campaigns feature advanced capabilities such as geo-targeting, frequency capping, road-blocking, and detailed reporting.<br />
+            For more information about managed campaigns, please e-mail <a class="blue-text-link" href="mailto:advertise@moarchan.org" alt="advertise@moarchan.org" target="_blank">advertise@moarchan.org</a> with details about what you'd like to advertise, your budget, and flight dates. A representative will respond to your inquiry as soon as possible.<br />
+            <span class="red-text">Note: We do not work with ad networks. If you represent a network, please do not e-mail us, as we will not respond to your inquiry.</span>
+            <span class="advertise-line"></span>
+            <span class="advertise-pitch">Want to advertise on moarchan, but not ready for a managed campaign? Try our <span class="blue-text-link" data-rt-href="/self-serve">Self-Serve Ads</span> option! [<span class="blue-text-link" data-rt-href="/self-serve-faq">Learn More</span>]</span>
+        </p>
+    </div>
+    <div class="left-container">
+        <section id="advertise-ad-units" class="green-section">
+            <div class="header-container">
+                <h3 class="box-header green-header">Ad Units</h3>
+            </div>
+        </section>
+    </div><div class="right-container">
+        <section id="advertise-stats" class="blue-section">
+            <div class="header-container">
+                <h3 class="box-header blue-header">Stats</h3>
+            </div>
+        </section>
+        <section id="advertise-demographic" class="blue-section">
+            <div class="header-container">
+                <h3 class="box-header blue-header">Demographic</h3>
+            </div>
+        </section>
+    </div>
+    {% include "main-footer.html" %}
+</div>
+
+
+---------- FILE: ./auth.html ----------
+
+<div class="page">
+    {% include "header.html" %}
+    <div class="pink-section auth-section">
+        <div class="header-container">
+            <h3 class="box-header pink-header auth-title">Login / Register</h3>
+        </div>
+        <div class="auth-container">
+            <form class="auth-form" onsubmit="return false;">
+                <div class="new-post-field-row">
+                    <label class="new-post-label" for="auth-alias">Alias</label>
+                    <input id="auth-alias" class="new-post-input form-input" type="text" name="alias" placeholder="Username (3-64 chars)" autocomplete="username" />
+                </div>
+                <div class="new-post-field-row">
+                    <label class="new-post-label" for="auth-password">Password</label>
+                    <input id="auth-password" class="new-post-input form-input" type="password" name="password" placeholder="Password (8-72 chars)" autocomplete="current-password" />
+                </div>
+                <div id="auth-repeat-row" class="new-post-field-row hide">
+                    <label class="new-post-label" for="auth-password-repeat">Repeat</label>
+                    <input id="auth-password-repeat" class="new-post-input form-input" type="password" name="password-repeat" placeholder="Repeat Password" autocomplete="new-password" />
+                </div>
+                <div class="auth-footer">
+                    <span class="form-toggler blue-text-link">Switch to Register</span>
+                    <button id="auth-submit-btn" class="form-button grey-button" type="button" name="enter">Login</button>
+                </div>
+                <div id="auth-message" class="auth-message hide"></div>
+            </form>
+        </div>
+    </div>
+    {% include "main-footer.html" %}
+</div>
+
+
+---------- FILE: ./base.html ----------
+
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, height=device-height, user-scalable=no, initial-scale=1, maximum-scale=1, minimum-scale=1" />
+        <link href="/static/css/screen.css" rel="stylesheet" type="text/css" />
+        <title>Moarchan</title>
+    </head>
+    <body>
+        <div data-base=""></div>
+        <script type="module" src="/static/js/frame.js"></script>
+        <script type="module" src="/static/js/controllers/main.js"></script>
+        <script type="module" src="/static/js/controllers/service.js"></script>
+        <script type="module" src="/static/js/controllers/auth.js"></script>
+    </body>
+</html>
+
+
+---------- FILE: ./blog.html ----------
+
+<div class="page">
+    {% include "header.html" %}
+    <div class="pink-section">
+        <div class="header-container">
+            <h3 class="box-header pink-header">Blog</h3>
+        </div>
+        <p class="box-message">No blog posts yet.</p>
+    </div>
+    {% include "main-footer.html" %}
+</div>
+
+
+---------- FILE: ./blotter.html ----------
+
+<div class="blotter-container">
+    <ul class="blotter">
+        <li class="blotter-item">10/01/14 <span class="red-text">Happy 11th Birthday, Moarchan!</span></li>
+        <li class="blotter-item">10/01/14 News Post: <span class="blue-text">HAPPY 11TH BIRTHD-</span></li>
+        <li class="blotter-item">08/12/14 Blog Post: <span class="blue-text">Sayonara E-mail field, and delayed thread pruning</span></li>
+    </ul>
+    <div class="blotter-buttons">
+        <div class="hide-blotter-container">[<span class="hide-blotter blue-text">Hide</span>]</div>
+        <div class="show-all-blotter-container">[<span class="show-all-blotter blue-text">Show All</span>]</div>
+        <div class="show-blotter-container hide">[<span class="show-blotter blue-text">Show Blotter</span>]</div>
+    </div>
+</div>
+
+
+---------- FILE: ./boards-footer.html ----------
+
+<nav class="topics-nav">
+    <li data-href="/a" title="/a">[ <span>a</span> /
+    </li><li data-href="/b" title="/b"><span>b</span> /
+    </li><li data-href="/c" title="/c"><span>c</span> /
+    </li><li data-href="/d" title="/d"><span>d</span> /
+    </li><li data-href="/e" title="/e"><span>e</span> /
+    </li><li data-href="/f" title="/f"><span>f</span> /
+    </li><li data-href="/g" title="/g"><span>g</span> /
+    </li><li data-href="/gif" title="/gif"><span>gif</span> /
+    </li><li data-href="/h" title="/h"><span>h</span> /
+    </li><li data-href="/hr" title="/hr"><span>hr</span> /
+    </li><li data-href="/k" title="/k"><span>k</span> /
+    </li><li data-href="/m" title="/m"><span>m</span> /
+    </li><li data-href="/o" title="/o"><span>o</span> /
+    </li><li data-href="/p" title="/p"><span>p</span> /
+    </li><li data-href="/r" title="/r"><span>r</span> /
+    </li><li data-href="/s" title="/s"><span>s</span> /
+    </li><li data-href="/t" title="/t"><span>t</span> /
+    </li><li data-href="/u" title="/u"><span>u</span> /
+    </li><li data-href="/v" title="/v"><span>v</span> /
+    </li><li data-href="/vr" title="/vr"><span>vr</span> /
+    </li><li data-href="/w" title="/w"><span>w</span> /
+    </li><li data-href="/wg" title="/wg"><span>wg</span> /
+    </li><li data-href="/i" title="/i"><span>i</span> /
+    </li><li data-href="/ic" title="/ic"><span>ic</span> /
+    </li><li data-href="/r9k" title="/r9k"><span>r9k</span> /
+    </li><li data-href="/s4s" title="/s4s"><span>s4s</span> /
+    </li><li data-href="/cm" title="/cm"><span>cm</span> /
+    </li><li data-href="/hm" title="/hm"><span>hm</span> /
+    </li><li data-href="/lgbt" title="/lgbt"><span>lgbt</span> /
+    </li><li data-href="/y" title="/y"><span>y</span> /
+    </li><li data-href="/3" title="/3"><span>3</span> /
+    </li><li data-href="/adv" title="/adv"><span>adv</span> /
+    </li><li data-href="/an" title="/an"><span>an</span> /
+    </li><li data-href="/asp" title="/asp"><span>asp</span> /
+    </li><li data-href="/biz" title="/biz"><span>biz</span> /
+    </li><li data-href="/cgl" title="/cgl"><span>cgl</span> /
+    </li><li data-href="/ck" title="/ck"><span>ck</span> /
+    </li><li data-href="/co" title="/co"><span>co</span> /
+    </li><li data-href="/diy" title="/diy"><span>diy</span> /
+    </li><li data-href="/fa" title="/fa"><span>fa</span> /
+    </li><li data-href="/fit" title="/fit"><span>fit</span> /
+    </li><li data-href="/gd" title="/gd"><span>gd</span> /
+    </li><li data-href="/hc" title="/hc"><span>hc</span> /
+    </li><li data-href="/int" title="/int"><span>int</span> /
+    </li><li data-href="/jp" title="/jp"><span>jp</span> /
+    </li><li data-href="/lit" title="/lit"><span>lit</span> /
+    </li><li data-href="/mlp" title="/mlp"><span>mlp</span> /
+    </li><li data-href="/mu" title="/mu"><span>mu</span> /
+    </li><li data-href="/n" title="/n"><span>n</span> /
+    </li><li data-href="/out" title="/out"><span>out</span> /
+    </li><li data-href="/po" title="/po"><span>po</span> /
+    </li><li data-href="/pol" title="/pol"><span>pol</span> /
+    </li><li data-href="/sci" title="/sci"><span>sci</span> /
+    </li><li data-href="/soc" title="/soc"><span>soc</span> /
+    </li><li data-href="/sp" title="/sp"><span>sp</span> /
+    </li><li data-href="/tg" title="/tg"><span>tg</span> /
+    </li><li data-href="/toy" title="/toy"><span>toy</span> /
+    </li><li data-href="/trv" title="/trv"><span>trv</span> /
+    </li><li data-href="/tv" title="/tv"><span>tv</span> /
+    </li><li data-href="/vp" title="/vp"><span>vp</span> /
+    </li><li data-href="/wsg" title="/wsg"><span>wsg</span> /
+    </li><li data-href="/x" title="/x"><span>x</span> ]
+    </li><li class="home-link" data-href="/" title="Home">[ <span>Home</span> ]
+    </li><li class="auth-nav-link" data-href="/auth" title="Auth">[ <span>Login/Register</span> ]
+    </li><li class="settings-link">[ <span>Settings</span> ]</li>
+</nav>
+</div>
+<p class="copyright-notice">All trademarks and copyrights on this page are owned by their respective parties. Images uploaded are the responsibility of the Poster. Comments are owned by the Poster.</p>
+
+
+---------- FILE: ./contact.html ----------
+
+<div class="page">
+    {% include "header.html" %}
+    <div class="pink-section">
+        <div class="header-container">
+            <h3 class="box-header pink-header">Contact</h3>
+        </div>
+        <p class="box-message">
+            For all administrative and business inquiries, please email <a class="blue-text-link" href="mailto:admin@moarchan.org">admin@moarchan.org</a>.
+        </p>
+    </div>
+    {% include "main-footer.html" %}
+</div>
+
+
+---------- FILE: ./faq.html ----------
+
+<div class="page">
+    {% include "header.html" %}
+    <div class="pink-section">
+        <div class="header-container">
+            <h3 class="box-header pink-header">Frequently Asked Questions</h3>
+        </div>
+        <p class="box-message">
+            Welcome to Moarchan's <strong>F</strong>requently <strong>A</strong>sked <strong>Q</strong>uestions page. After reading the FAQ, be sure to familiarize yourself with the <span class="blue-text-link" data-rt-href="/rules">rules</span>!
+        </p>
+    </div>
+    <div class="left-container">
+        <section id="faq-questions" class="green-section">
+            <div class="header-container">
+                <h3 class="box-header green-header">Questions</h3>
+            </div>
+        </section>
+    </div><div class="right-container">
+        <section id="faq-basics" class="blue-section">
+            <div class="header-container">
+                <h3 class="box-header blue-header">Basics</h3>
+            </div>
+        </section>
+        <section id="faq-culture" class="blue-section">
+            <div class="header-container">
+                <h3 class="box-header blue-header">Culture</h3>
+            </div>
+        </section>
+        <section id="faq-contribution" class="blue-section">
+            <div class="header-container">
+                <h3 class="box-header blue-header">Contribution</h3>
+            </div>
+        </section>
+        <section id="faq-features" class="blue-section">
+            <div class="header-container">
+                <h3 class="box-header blue-header">Features</h3>
+            </div>
+        </section>
+        <section id="faq-issues" class="blue-section">
+            <div class="header-container">
+                <h3 class="box-header blue-header">Issues</h3>
+            </div>
+        </section>
+        <section id="faq-administration" class="blue-section">
+            <div class="header-container">
+                <h3 class="box-header blue-header">Administration</h3>
+            </div>
+        </section>
+        <section id="faq-banishment" class="blue-section">
+            <div class="header-container">
+                <h3 class="box-header blue-header">Banishment</h3>
+            </div>
+        </section>
+        <section id="faq-technical" class="blue-section">
+            <div class="header-container">
+                <h3 class="box-header blue-header">Technical</h3>
+            </div>
+        </section>
+        <section id="faq-donations" class="blue-section">
+            <div class="header-container">
+                <h3 class="box-header blue-header">Donations</h3>
+            </div>
+        </section>
+        <section id="faq-events" class="blue-section">
+            <div class="header-container">
+                <h3 class="box-header blue-header">Events</h3>
+            </div>
+        </section>
+        <section id="faq-about" class="blue-section">
+            <div class="header-container">
+                <h3 class="box-header blue-header">About</h3>
+            </div>
+        </section>
+    </div>
+    {% include "main-footer.html" %}
+</div>
+
+
+---------- FILE: ./feedback.html ----------
+
+<div class="page">
+    {% include "header.html" %}
+    <div class="pink-section">
+        <div class="header-container">
+            <h3 class="box-header pink-header">Feedback</h3>
+        </div>
+        <p class="box-message">
+            Have suggestions, bug reports, or feature requests? Email <a class="blue-text-link" href="mailto:feedback@moarchan.org">feedback@moarchan.org</a>.
+        </p>
+    </div>
+    {% include "main-footer.html" %}
+</div>
+
+
+---------- FILE: ./header.html ----------
+
+<header class="moarchan-header">
+    <div class="moarchan-brand" data-href="/">
+        <img class="moarchan-clover" src="/static/images/moarchan-clover.png" alt="MoarChan" title="MoarChan" data-href="/" />
+        <h1 class="moarchan-text">MoarChan</h1>
+    </div>
+    <div class="header-auth-bar">
+        {% if alias %}
+            <span>Logged in as: <strong>{{ alias }}</strong> ({{ privilege }})</span>
+            [ <a href="#" data-action="logout" class="red-text-link">Logout</a> ]
+        {% else %}
+            [ <a href="/auth" class="blue-text-link" data-href="/auth">Login / Register</a> ]
+        {% endif %}
+    </div>
+</header>
+
+
+---------- FILE: ./legal.html ----------
+
+<div class="page">
+    {% include "header.html" %}
+    <div class="pink-section">
+        <div class="header-container">
+            <h3 class="box-header pink-header">Legal</h3>
+        </div>
+        <p class="box-message">
+            All trademarks, images, and copyrights on this website are owned by their respective parties. Uploaded images and comments are the sole responsibility of the individual poster.
+        </p>
+    </div>
+    {% include "main-footer.html" %}
+</div>
+
+
+---------- FILE: ./main-footer.html ----------
+
+<nav class="main-footer">
+    <li class="main-footer-item" data-href="/" title="Home">Home
+    </li><li class="main-footer-item" data-href="/news" title="News">News
+    </li><li class="main-footer-item" data-href="/blog" title="Blog">Blog
+    </li><li class="main-footer-item" data-href="/faq" title="FAQ">FAQ
+    </li><li class="main-footer-item" data-href="/rules" title="Rules">Rules
+    </li><li class="main-footer-item" data-href="/advertise" title="Advertise">Advertise
+    </li><li class="main-footer-item" data-href="/press" title="Press">Press
+    </li><li class="main-footer-item" data-href="/auth" title="Login/Register">Login / Register</li>
+</nav>
+<div class="lower-footer">
+    <ul class="lower-footer-list">
+        <li class="lower-footer-item" data-href="/about" title="About">About
+        </li><li class="lower-footer-item" data-href="/feedback" title="Feedback">Feedback
+        </li><li class="lower-footer-item" data-href="/legal" title="Legal">Legal
+        </li><li class="lower-footer-item" data-href="/contact" title="Contact">Contact</li>
+    </ul>
+    <p class="copyright">Copyright &copy; 2015 MoarChan, LLC. All rights reserved.</p>
+</div>
+
+
+---------- FILE: ./main.html ----------
+
+<div class="disclaimer-container hide">
+    <div class="disclaimer">
+        <h3 class="disclaimer-header">Disclaimer<img class="close-disclaimer" src="/static/images/icon-close-red.png" alt="Close" title="Close" /></h3>
+        <div class="disclaimer-body">
+            <p>To access this section of Moarchan (the "website"), you understand and agree to the following:</p>
+            <ol>
+                <li>The content of this website is for mature audiences only and may not be suitable for minors. If you are a minor or it is illegal for you to access mature images and language, do not proceed.</li>
+                <li>This website is presented to you AS IS, with no warranty, express or implied. By clicking "I Agree," you agree not to hold moarchan responsible for any damages from your use of the website, and you understand that the content posted is not owned or generated by moarchan, but rather by moarchan's users.</li>
+                <li>As a condition of using this website, you agree to comply with the "<span class="blue-text-link" data-href="/terms">Terms of Use</span>" ("Terms") and "<span class="blue-text-link" data-href="/rules">Rules</span>" of moarchan, which are also linked on the home page. Please read the Terms and Rules carefully, because they are important.</li>
+            </ol>
+            <div class="disclaimer-buttons">
+                <button id="agree-to-disclaimer" type="button" name="agree">I Agree</button>
+                <button class="close-disclaimer" type="button" name="cancel">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="page">
+    {% include "header.html" %}
+    <section id="main-boards" class="pink-section">
+        <div class="header-container">
+            <h3 class="box-header pink-header">Boards</h3>
+            <div class="filter-container">
+                <span class="filter-menu-button">filter</span>
+                <ul class="filter-menu">
+                    <li class="filter-menu-item">Show All Boards</li>
+                    <li class="filter-menu-item">Show NSFW Boards Only</li>
+                    <li class="filter-menu-item">Show Worksafe Boards Only</li>
+                    <li class="filter-menu-item">Show All Boards (Classic)</li>
+                    <hr />
+                    <li class="filter-menu-item">Use Frames</li>
+                    <li class="filter-menu-item">Use Catalog</li>
+                </ul>
+            </div>
+        </div>
+        <div class="topics-container">
+            <ul class="topics-list">
+                <li class="topics-list-header">Japanese Culture</li>
+                <li class="topics-list-item" data-href="/a/" title="Anime & Manga">Anime &amp; Manga</li>
+                <li class="topics-list-item" data-href="/c/" title="Anime/Cute">Anime/Cute</li>
+                <li class="topics-list-item" data-href="/w/" title="Anime/Wallpapers">Anime/Wallpapers</li>
+                <li class="topics-list-item" data-href="/m/" title="Mecha">Mecha</li>
+                <li class="topics-list-item" data-href="/cgl/" title="Cosplay & EGL">Cosplay &amp; EGL</li>
+                <li class="topics-list-item" data-href="/cm/" title="Cute/Male">Cute/Male</li>
+                <li class="topics-list-item" data-href="/f/" title="Flash">Flash</li>
+                <li class="topics-list-item" data-href="/n/" title="Transportation">Transportation</li>
+                <li class="topics-list-item" data-href="/jp/" title="Otaku Culture">Otaku Culture</li>
+                <li class="topics-list-item" data-href="/vp/" title="Pokemon">Pokemon</li>
+            </ul>
+            <ul class="topics-list">
+                <li class="topics-list-header">Interests</li>
+                <li class="topics-list-item" data-href="/v/" title="Video Game">Video Game</li>
+                <li class="topics-list-item" data-href="/vg/" title="Video Game Generals">Video Game Generals</li>
+                <li class="topics-list-item" data-href="/vr/" title="Retro Games">Retro Games</li>
+                <li class="topics-list-item" data-href="/co/" title="Comics & Cartoons">Comics &amp; Cartoons</li>
+                <li class="topics-list-item" data-href="/g/" title="Technology">Technology</li>
+                <li class="topics-list-item" data-href="/tv/" title="Television & Film">Television &amp; Film</li>
+                <li class="topics-list-item" data-href="/k/" title="Weapons">Weapons</li>
+                <li class="topics-list-item" data-href="/o/" title="Auto">Auto</li>
+                <li class="topics-list-item" data-href="/an/" title="Animals & Nature">Animals &amp; Nature</li>
+                <li class="topics-list-item" data-href="/tg/" title="Traditional Games">Traditional Games</li>
+                <li class="topics-list-item" data-href="/sp/" title="Sports">Sports</li>
+                <li class="topics-list-item" data-href="/asp/" title="Alternative Sports">Alternative Sports</li>
+                <li class="topics-list-item" data-href="/sci/" title="Science & Math">Science &amp; Math</li>
+                <li class="topics-list-item" data-href="/int/" title="International">International</li>
+                <li class="topics-list-item" data-href="/out/" title="Outdoors">Outdoors</li>
+                <li class="topics-list-item" data-href="/toy/" title="Tyos">Toys</li>
+                <li class="topics-list-item" data-href="/biz/" title="Business & Finance">Business &amp; Finance</li>
+            </ul>
+            <ul class="topics-list">
+                <li class="topics-list-header">Creative</li>
+                <li class="topics-list-item" data-href="/i/" title="Oekaki">Oekaki</li>
+                <li class="topics-list-item" data-href="/po/" title="Papercraft & Original">Papercraft &amp; Original</li>
+                <li class="topics-list-item" data-href="/p/" title="Photography">Photography</li>
+                <li class="topics-list-item" data-href="/ck/" title="Food & Cooking">Food &amp; Cooking</li>
+                <li class="topics-list-item" data-href="/ic/" title="Artwork/Critique">Artwork/Critique</li>
+                <li class="topics-list-item" data-href="/wg/" title="Wallpapers/General">Wallpapers/General</li>
+                <li class="topics-list-item" data-href="/mu/" title="Music">Music</li>
+                <li class="topics-list-item" data-href="/fa/" title="Fashion">Fashion</li>
+                <li class="topics-list-item" data-href="/3/" title="3DCG">3DCG</li>
+                <li class="topics-list-item" data-href="/gd/" title="Graphic Design">Graphic Design</li>
+                <li class="topics-list-item" data-href="/diy/" title="Do-It-Yourself">Do-It-Yourself</li>
+                <li class="topics-list-item" data-href="/wsg/" title="Worksafe GIF">Worksafe GIF</li>
+            </ul>
+            <ul class="topics-list">
+                <li class="topics-list-header">Other</li>
+                <li class="topics-list-item" data-href="/trv/" title="Travel">Travel</li>
+                <li class="topics-list-item" data-href="/fit/" title="Fitness">Fitness</li>
+                <li class="topics-list-item" data-href="/x/" title="Paranormal">Paranormal</li>
+                <li class="topics-list-item" data-href="/lit/" title="Literature">Literature</li>
+                <li class="topics-list-item" data-href="/adv/" title="Advice">Advice</li>
+                <li class="topics-list-item" data-href="/lgbt/" title="LGBT">LGBT</li>
+                <li class="topics-list-item" data-href="/pony/" title="Pony">Pony</li>
+                <li class="topics-list-header">Misc.</li>
+                <li class="topics-list-item" data-href="/b/" title="Random">Random</li>
+                <li class="topics-list-item" data-href="/r/" title="Request">Request</li>
+                <li class="topics-list-item" data-href="/r9k/" title="ROBOT9001">ROBOT9001</li>
+                <li class="topics-list-item" data-href="/pol/" title="Politically Incorrect">Politically Incorrect</li>
+                <li class="topics-list-item" data-href="/soc/" title="Cams & Meetups">Cams &amp; Meetups</li>
+                <li class="topics-list-item" data-href="/s4s/" title="Shit moarchan Says">Shit moarchan Says</li>
+            </ul>
+            <ul class="topics-list">
+                <li class="topics-list-header">Adult</li>
+                <li class="topics-list-item" data-href="/s/" title="Sexy Beautiful Women">Sexy Beautiful Women</li>
+                <li class="topics-list-item" data-href="/hc/" title="Hardcore">Hardcore</li>
+                <li class="topics-list-item" data-href="/hm/" title="Handsome Men">Handsome Men</li>
+                <li class="topics-list-item" data-href="/h/" title="Hentai">Hentai</li>
+                <li class="topics-list-item" data-href="/e/" title="Ecchi">Ecchi</li>
+                <li class="topics-list-item" data-href="/u/" title="Yuri">Yuri</li>
+                <li class="topics-list-item" data-href="/d/" title="Hentai/Alternative">Hentai/Alternative</li>
+                <li class="topics-list-item" data-href="/y/" title="Yaoi">Yaoi</li>
+                <li class="topics-list-item" data-href="/t/" title="Torrents">Torrents</li>
+                <li class="topics-list-item" data-href="/hr/" title="High Resolution">High Resolution</li>
+                <li class="topics-list-item" data-href="/gif/" title="Adult GIF">Adult GIF</li>
+            </ul>
+        </div>
+    </section>
+    <div class="main-columns">
+        <div class="left-container">
+            <section id="main-recent-images" class="green-section">
+                <div class="header-container">
+                    <h3 class="box-header green-header">Recent Images</h3>
+                </div>
+            </section>
+        </div>
+        <div class="right-container">
+            <section id="main-latest-posts" class="blue-section">
+                <div class="header-container">
+                    <h3 class="box-header blue-header">Latest Posts</h3>
+                    <div class="filter-container">
+                        <span class="filter-menu-button">options</span>
+                        <ul class="filter-menu">
+                            <li class="filter-menu-item">Show Worksafe Content &amp; Images Only</li>
+                            <li class="filter-menu-item">Show NSFW Content &amp; Images Only</li>
+                            <li class="filter-menu-item">Show All Content &amp; Images</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+            <section id="main-popular-threads" class="blue-section">
+                <div class="header-container">
+                    <h3 class="box-header blue-header">Popular Threads</h3>
+                </div>
+            </section>
+            <section id="main-stats" class="blue-section">
+                <div class="header-container">
+                    <h3 class="box-header blue-header">Stats</h3>
+                </div>
+            </section>
+        </div>
+    </div>
+    {% include "main-footer.html" %}
+</div>
+
+
+---------- FILE: ./news.html ----------
+
+<div class="page">
+    {% include "header.html" %}
+    <div class="pink-section">
+        <div class="header-container">
+            <h3 class="box-header pink-header">News</h3>
+        </div>
+        <section class="news-reel">
+            <div class="news-post">
+                <h3 class="news-header">
+                    IN MEMORIAM by "The Team" - 1/26/15 @ 12:30AM EST
+                    <span class="news-hash blue-text-link">#</span>
+                </h3>
+                <div class="news-image-container">
+                    <a class="news-image-link" href="/static/images/news/rip_moot_2015.jpg" target="_blank">
+                        <img class="news-image" src="/static/images/news/rip_moot_2015.jpg" alt="RIP Moot" title="RIP Moot" />
+                    </a>
+                </div>
+            </div>
+        </section>
+    </div>
+    {% include "main-footer.html" %}
+</div>
+
+
+---------- FILE: ./press.html ----------
+
+<div class="page">
+    {% include "header.html" %}
+    <div class="pink-section">
+        <div class="header-container">
+            <h3 class="box-header pink-header">Press</h3>
+        </div>
+        <p class="box-message">
+            Since its creation in 2003, moarchan has grown to become one of the world's largest forums, serving approximately 615,000,000 page impressions to over 22,000,000 unique visitors per month (~11 MM in the US). The website is mainly popular amongst young adults, and its imageboard format is based fully on user-generated content. Users post in a variety of interest-themed imageboards, including Video Games, Anime, Lifestyle and Technology.
+            <br />
+            <br />
+            moarchan.org is one of the highest-trafficked US sites according to Alexa and Quantcast, and is ranked by Big-Boards as being the 2nd largest BBS in the world. moarchan is credited with spawning a number of wildly popular internet memes, including LOLcats, the rapid rise to popularity of Tay "Chocolate Rain" Zonday, and "Rickrolling"—among many others.
+            <br />
+            <br />
+            Press/media inquiries: <a class="blue-text-link" href="mailto:press@moarchan.org" alt="press@moarchan.org" target="_blank">press@moarchan.org</a>.
+        </p>
+    </div>
+    <div class="left-container">
+        <section id="print-in-the-news-2011" class="green-section">
+            <div class="header-container">
+                <h3 class="box-header green-header">In the news, 2011</h3>
+            </div>
+        </section>
+        <section id="print-in-the-news-2010" class="green-section">
+            <div class="header-container">
+                <h3 class="box-header green-header">In the news, 2010</h3>
+            </div>
+        </section>
+        <section id="print-in-the-news-2009" class="green-section">
+            <div class="header-container">
+                <h3 class="box-header green-header">In the news, 2009</h3>
+            </div>
+        </section>
+        <section id="print-in-the-news-2008" class="green-section">
+            <div class="header-container">
+                <h3 class="box-header green-header">In the news, 2008</h3>
+            </div>
+        </section>
+        <section id="print-featured-on" class="green-section">
+            <div class="header-container">
+                <h3 class="box-header green-header">Featured on...</h3>
+            </div>
+        </section>
+        <section id="print-april-fools" class="green-section">
+            <div class="header-container">
+                <h3 class="box-header green-header">April Fool's!</h3>
+            </div>
+        </section>
+        <section id="print-memes" class="green-section">
+            <div class="header-container">
+                <h3 class="box-header green-header">
+                    Memes
+                    <span id="print-show-more-memes" class="show-more">[Show More]</span>
+                </h3>
+            </div>
+        </section>
+    </div><div class="right-container">
+        <section id="press-print" class="blue-section">
+            <div class="header-container">
+                <h3 class="box-header blue-header">
+                    Print
+                    <span id="print-show-more-print" class="show-more">[Show More]</span>
+                </h3>
+            </div>
+        </section>
+        <section id="press-mentions" class="blue-section">
+            <div class="header-container">
+                <h3 class="box-header blue-header">
+                    Mentions
+                    <span id="print-show-more-print" class="show-more">[Show More]</span>
+                </h3>
+            </div>
+        </section>
+    </div>
+    {% include "main-footer.html" %}
+</div>
+
+
+---------- FILE: ./reply-item.html ----------
+
+<div class="reply-container">
+    <div class="reply-wrapper">
+        <span class="post-side-arrows">&gt;&gt;</span>
+        <div id="post-{{ hash }}" class="reply">
+            <div class="post-header">
+                <input class="post-checkbox" type="checkbox" />
+                <span class="post-username">{{ name }}</span>
+                <span class="post-date">{{ timestamp }}</span>
+                <span class="post-link-to red-text-link" title="Link to this post">No.</span>
+                <span class="post-reply-to red-text-link" title="Reply to this post" data-thread="{{ thread }}">{{ hash }}</span>
+                <div class="post-options" title="Post menu">
+                    <span class="post-options-arrow" data-post="{{ hash }}"></span>
+                    <ul id="post-menu-{{ hash }}" class="post-options-menu hide">
+                        <li class="report-post" data-post="{{ hash }}">Report Post</li>
+                        <li class="hide-post" data-post="{{ hash }}">Hide Post</li>
+                        <li class="unhide-post" data-post="{{ hash }}">Unhide Post</li>
+                        {% if file_name %}
+                        <li class="image-search" data-post="{{ hash }}">Image Search &gt;&gt;</li>
+                        {% endif %}
+                    </ul>
+                </div>
+                {% for tag in taggedBy %}
+                <span class="post-tag blue-text-link" data-tag="{{ tag }}">&gt;&gt;{{ tag }}</span>
+                {% endfor %}
+            </div>
+            {% if file_name %}
+            <div class="post-image-metadata">
+                File: <a class="post-image-link blue-text-link" href="/static/images/uploads/{{ file_name }}" alt="{{ file_name }}" title="{{ file_name }}" target="_blank">{{ file_name }}</a>
+                <span class="post-image-dimensions">({{ file_size }} KB, {{ file_dimensions }})</span>
+            </div>
+            {% endif %}
+            <div class="reply-body">
+                {% if file_name %}
+                <a class="post-image-container" href="/static/images/uploads/{{ file_name }}" target="_blank">
+                    <img class="post-image" src="/static/images/uploads/thumb_{{ file_name }}" data-full="/static/images/uploads/{{ file_name }}" data-thumb="/static/images/uploads/thumb_{{ file_name }}" title="{{ file_name }}" alt="{{ file_name }}" />
+                </a>
+                {% endif %}
+                <p class="post-content">{{ comment | unescaped }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+---------- FILE: ./rules.html ----------
+
+<div class="page">
+    {% include "header.html" %}
+    <div class="pink-section">
+        <div class="header-container">
+            <h3 class="box-header pink-header">Rules</h3>
+        </div>
+        <p class="box-message">
+            By using this website (the "site"), you agree that you'll follow these rules, and understand that if we reasonably think you haven't followed these rules, we may (at our own discretion) terminate your access to the site:
+        </p>
+    </div>
+    <div class="left-container">
+        <section id="rules-boards" class="green-section">
+            <div class="header-container">
+                <h3 class="box-header green-header">Boards</h3>
+            </div>
+        </section>
+    </div><div class="right-container">
+        <section id="rules-global-rules" class="blue-section">
+            <div class="header-container">
+                <h3 class="box-header blue-header">Global Rules</h3>
+            </div>
+        </section>
+        <section id="rules-image-boards" class="blue-section">
+            <div class="header-container">
+                <h3 class="box-header blue-header">Image Boards</h3>
+            </div>
+        </section>
+        <section id="rules-upload-boards" class="blue-section">
+            <div class="header-container">
+                <h3 class="box-header blue-header">Upload Boards</h3>
+            </div>
+        </section>
+        <section id="rules-irc" class="blue-section">
+            <div class="header-container">
+                <h3 class="box-header blue-header">IRC</h3>
+            </div>
+        </section>
+    </div>
+    {% include "main-footer.html" %}
+</div>
+
+
+---------- FILE: ./thread.html ----------
+
+{% include "top.html" %}
+<div class="new-post-container">
+    <p class="new-post">[<span class="blue-text-link">Post a Reply</span>]</p>
+    <form class="new-post-form hide">
+        <div class="new-post-field-row">
+            <label class="new-post-label" for="new-post-name">Name</label>
+            <input id="new-post-name" class="new-post-input" type="text" name="Name" />
+        </div>
+        <div class="new-post-field-row">
+            <label class="new-post-label" for="new-post-options">Options</label>
+            <input id="new-post-options" class="new-post-input" type="text" name="Options" />
+            <button id="new-post-button" class="new-post-button grey-button" name="new-post-button" type="button">Post</button>
+        </div>
+        <div class="new-post-field-row">
+            <label class="new-post-label" for="new-post-password">Password</label>
+            <input id="new-post-password" class="new-post-input" type="password" name="password" placeholder="Deletion password" />
+        </div>
+        <div class="new-post-field-row">
+            <label class="new-post-label" for="new-post-comment">Comment</label>
+            <textarea id="new-post-comment" class="new-post-input" rows="auto" cols="auto"></textarea>
+        </div>
+        <div class="new-post-field-row">
+            <label class="new-post-label" for="new-post-verification">Verification</label>
+            <input id="new-post-verification" class="new-post-input" type="text" name="Comment" />
+        </div>
+        <div class="new-post-field-row">
+            <label class="new-post-label" for="new-post-file">File</label>
+            <input id="new-post-file" class="new-post-file-input" type="file" />
+        </div>
+        <ol class="new-post-bullets">
+            <li>Please read the Rules and FAQ before posting.</li>
+            <li>Maximum file size allowed is 8192 KB.</li>
+            <li>Images greater than 10000x10000 pixels are not allowed.</li>
+        </ol>
+    </form>
+</div>
+{% include "blotter.html" %}
+<p class="support-moarchan">Please <span data-href="/support" class="blue-text-link">support Moarchan</span> by disabling your ad blocker on *.moarchan.org/*, <span data-href="/self-serve" class="blue-text-link">purchasing a self-serve ad</span>, or <span data-href="/pass" class="blue-text-link">buying a moarchan Pass.</span></p>
+<div class="top-container">
+    <input class="search-ops" type="text" placeholder="Search OPs..." />
+    <p class="catalog-link">[<span data-href="/catalog" class="blue-text-link">Catalog</span>]</p>
+</div>
+<div class="board">
+    {% include "thread-item.html" with context %}
+</div>
+<div class="bottom-container">
+    <div class="bottom-right-side">
+        Delete Post: [
+        <input class="file-only" type="checkbox" name="file-only" id="delete-file-only">
+        <label for="delete-file-only">File Only</label>]
+        <input type="password" id="delete-post-password" placeholder="Password" class="new-post-input" style="width: 100px; padding: 2px 4px;">
+        <button class="delete grey-button" type="button" name="delete">Delete</button>
+        Style:
+        <select class="select-style grey-button" name="style">
+            <option value="Yotsuba">Yotsuba</option>
+            <option value="Yotsuba B">Yotsuba B</option>
+        </select>
+    </div>
+</div>
+{% include "boards-footer.html" %}
+
+
+---------- FILE: ./thread-item.html ----------
+
+<div id="post-{{ hash }}" class="thread">
+    <div class="post-file-header op">
+        <div class="post-show-hide-icons op">
+            <img class="post-show-hide-thread plus op" data-post="{{ hash }}" src="/static/images/show-hide-thread-plus-red.png" alt="Plus" title="Plus" />
+            <img class="post-show-hide-thread minus op" data-post="{{ hash }}" src="/static/images/show-hide-thread-minus-red.png" alt="Minus" title="Minus" />
+        </div>
+        {% if file_name %}
+        <div class="post-image-metadata op">
+            File: <a class="post-image-link blue-text-link op" href="/static/images/uploads/{{ file_name }}" alt="{{ file_name }}" title="{{ file_name }}" target="_blank">{{ file_name }}</a>
+            <span class="post-image-dimensions op">({{ file_size }} KB, {{ file_dimensions }})</span>
+        </div>
+        {% endif %}
+    </div>
+    <div class="post-body op">
+        {% if file_name %}
+        <a class="post-image-container op" href="/static/images/uploads/{{ file_name }}" target="_blank">
+            <img class="post-image op" src="/static/images/uploads/thumb_{{ file_name }}" data-full="/static/images/uploads/{{ file_name }}" data-thumb="/static/images/uploads/thumb_{{ file_name }}" alt="{{ file_name }}" title="{{ file_name }}" />
+        </a>
+        {% endif %}
+        <div class="post-details op">
+            <div class="post-header op">
+                <input class="post-checkbox op" type="checkbox" />
+                <span class="post-subject op">{{ subject }}</span>
+                <span class="post-username op">{{ name }}</span>
+                <span class="post-date op">{{ timestamp }}</span>
+                <span class="post-link-to red-text-link op" title="Link to this post" data-href="/{{ topic }}/thread/{{ hash }}">No.</span>
+                <span class="post-reply-to red-text-link op" title="Reply to this post" data-thread="{{ hash }}">{{ hash }}</span>
+                <img class="post-thumbtack op" src="/static/images/thumbtack.gif" alt="Sticky" />
+                <img class="post-lock op" src="/static/images/lock.gif" alt="Closed" />
+                <span class="post-reply-to-text op">[<span class="blue-text-link" data-href="/{{ topic }}/thread/{{ hash }}">Reply</span>]</span>
+                <div class="post-options op" title="Post menu">
+                    <span class="post-options-arrow op" data-post="{{ hash }}"></span>
+                    <ul id="post-menu-{{ hash }}" class="post-options-menu hide op">
+                        <li class="report-post op" data-post="{{ hash }}">Report Thread</li>
+                        <li class="hide-post op" data-post="{{ hash }}">Hide Thread</li>
+                        <li class="unhide-post op" data-post="{{ hash }}">Unhide Thread</li>
+                        <li class="image-search op" data-post="{{ hash }}">Image Search &gt;&gt;</li>
+                    </ul>
+                </div>
+                {% for tag in taggedBy %}
+                <span class="post-tag blue-text-link op" data-tag="{{ tag }}">&gt;&gt;{{ tag }}</span>
+                {% endfor %}
+            </div>
+            <p class="post-content op">{{ comment | unescaped }}</p>
+        </div>
+    </div>
+    <div class="thread-container">
+        <div class="post-summary-container">
+            <div class="post-show-hide-icons replies">
+                <img class="post-show-hide-replies plus" data-post="{{ hash }}" src="/static/images/show-hide-thread-plus-red.png" alt="Plus" title="Plus" />
+                <img class="post-show-hide-replies minus" data-post="{{ hash }}" src="/static/images/show-hide-thread-minus-red.png" alt="Minus" title="Minus" />
+            </div>
+            <p class="post-summary">0 posts omitted. <span class="blue-text-link" data-href="/{{ topic }}/thread/{{ hash }}">Click here</span> to view.</p>
+        </div>
+        {% for reply in replies %}
+            {% include "reply-item.html" with context %}
+        {% endfor %}
+    </div>
+    <div class="spacer"></div>
+</div>
+
+
+---------- FILE: ./top.html ----------
+
+<div class="reply-box hide" style="top: 100px; left: 100px;">
+    <h2 class="reply-box-header">Reply to Thread No. <span class="reply-box-header-text"></span><img class="reply-box-close" src="/static/images/cross-red.png" alt="close" title="close" /></h2>
+    <input id="reply-box-name" class="reply-box-input" type="text" name="name" placeholder="Name" />
+    <input id="reply-box-options" class="reply-box-input" type="text" name="options" placeholder="Options" />
+    <input id="reply-box-password" class="reply-box-input" type="password" name="password" placeholder="Password (for deletion)" />
+    <textarea id="reply-box-comment" class="reply-box-textarea" rows="auto" cols="auto"></textarea>
+    <div class="reply-box-buttons">
+        <input id="reply-box-file" class="reply-box-file" type="file" />
+        <button class="reply-box-post grey-button" type="button">Post</button>
+    </div>
+</div>
+<div>
+    <nav class="topics-nav">
+        <li data-href="/a" title="/a">[ <span>a</span> /
+        </li><li data-href="/b" title="/b"><span>b</span> /
+        </li><li data-href="/c" title="/c"><span>c</span> /
+        </li><li data-href="/d" title="/d"><span>d</span> /
+        </li><li data-href="/e" title="/e"><span>e</span> /
+        </li><li data-href="/f" title="/f"><span>f</span> /
+        </li><li data-href="/g" title="/g"><span>g</span> /
+        </li><li data-href="/gif" title="/gif"><span>gif</span> /
+        </li><li data-href="/h" title="/h"><span>h</span> /
+        </li><li data-href="/hr" title="/hr"><span>hr</span> /
+        </li><li data-href="/k" title="/k"><span>k</span> /
+        </li><li data-href="/m" title="/m"><span>m</span> /
+        </li><li data-href="/o" title="/o"><span>o</span> /
+        </li><li data-href="/p" title="/p"><span>p</span> /
+        </li><li data-href="/r" title="/r"><span>r</span> /
+        </li><li data-href="/s" title="/s"><span>s</span> /
+        </li><li data-href="/t" title="/t"><span>t</span> /
+        </li><li data-href="/u" title="/u"><span>u</span> /
+        </li><li data-href="/v" title="/v"><span>v</span> /
+        </li><li data-href="/vr" title="/vr"><span>vr</span> /
+        </li><li data-href="/w" title="/w"><span>w</span> /
+        </li><li data-href="/wg" title="/wg"><span>wg</span> /
+        </li><li data-href="/i" title="/i"><span>i</span> /
+        </li><li data-href="/ic" title="/ic"><span>ic</span> /
+        </li><li data-href="/r9k" title="/r9k"><span>r9k</span> /
+        </li><li data-href="/s4s" title="/s4s"><span>s4s</span> /
+        </li><li data-href="/cm" title="/cm"><span>cm</span> /
+        </li><li data-href="/hm" title="/hm"><span>hm</span> /
+        </li><li data-href="/lgbt" title="/lgbt"><span>lgbt</span> /
+        </li><li data-href="/y" title="/y"><span>y</span> /
+        </li><li data-href="/3" title="/3"><span>3</span> /
+        </li><li data-href="/adv" title="/adv"><span>adv</span> /
+        </li><li data-href="/an" title="/an"><span>an</span> /
+        </li><li data-href="/asp" title="/asp"><span>asp</span> /
+        </li><li data-href="/biz" title="/biz"><span>biz</span> /
+        </li><li data-href="/cgl" title="/cgl"><span>cgl</span> /
+        </li><li data-href="/ck" title="/ck"><span>ck</span> /
+        </li><li data-href="/co" title="/co"><span>co</span> /
+        </li><li data-href="/diy" title="/diy"><span>diy</span> /
+        </li><li data-href="/fa" title="/fa"><span>fa</span> /
+        </li><li data-href="/fit" title="/fit"><span>fit</span> /
+        </li><li data-href="/gd" title="/gd"><span>gd</span> /
+        </li><li data-href="/hc" title="/hc"><span>hc</span> /
+        </li><li data-href="/int" title="/int"><span>int</span> /
+        </li><li data-href="/jp" title="/jp"><span>jp</span> /
+        </li><li data-href="/lit" title="/lit"><span>lit</span> /
+        </li><li data-href="/mlp" title="/mlp"><span>mlp</span> /
+        </li><li data-href="/mu" title="/mu"><span>mu</span> /
+        </li><li data-href="/n" title="/n"><span>n</span> /
+        </li><li data-href="/out" title="/out"><span>out</span> /
+        </li><li data-href="/po" title="/po"><span>po</span> /
+        </li><li data-href="/pol" title="/pol"><span>pol</span> /
+        </li><li data-href="/sci" title="/sci"><span>sci</span> /
+        </li><li data-href="/soc" title="/soc"><span>soc</span> /
+        </li><li data-href="/sp" title="/sp"><span>sp</span> /
+        </li><li data-href="/tg" title="/tg"><span>tg</span> /
+        </li><li data-href="/toy" title="/toy"><span>toy</span> /
+        </li><li data-href="/trv" title="/trv"><span>trv</span> /
+        </li><li data-href="/tv" title="/tv"><span>tv</span> /
+        </li><li data-href="/vp" title="/vp"><span>vp</span> /
+        </li><li data-href="/wsg" title="/wsg"><span>wsg</span> /
+        </li><li data-href="/x" title="/x"><span>x</span> ]
+        </li><li class="home-link" data-href="/" title="Home">[ <span>Home</span> ]
+        </li><li class="auth-nav-link" data-href="/auth" title="Auth">[ <span>Login/Register</span> ]
+        </li><li class="settings-link">[ <span>Settings</span> ]</li>
+    </nav>
+    <img class="topic-image" src="/static/images/topic-image.png" alt="" title="" />
+    <h1 class="topic-header"></h1>
+    <hr class="top-line one" />
+    <p class="support-moarchan">Please <span data-href="/support" class="blue-text-link">support Moarchan</span> by disabling your ad blocker on *.moarchan.org/*, <span data-href="/self-serve" class="blue-text-link">purchasing a self-serve ad</span>, or <span data-href="/pass" class="blue-text-link">buying a moarchan Pass.</span></p>
+    <hr class="top-line two" />
+
+
+---------- FILE: ./topic.html ----------
+
+{% include "top.html" %}
+<div class="new-post-container">
+    <p class="new-post">[<span class="blue-text-link">Start A New Thread</span>]</p>
+    <form class="new-post-form hide">
+        <div class="new-post-field-row">
+            <label class="new-post-label" for="new-post-name">Name</label>
+            <input id="new-post-name" class="new-post-input" type="text" name="Name" />
+        </div>
+        <div class="new-post-field-row">
+            <label class="new-post-label" for="new-post-subject">Subject</label>
+            <input id="new-post-subject" class="new-post-input" type="text" name="Subject" />
+        </div>
+        <div class="new-post-field-row">
+            <label class="new-post-label" for="new-post-options">Options</label>
+            <input id="new-post-options" class="new-post-input" type="text" name="Options" />
+            <button id="new-post-button" class="new-post-button grey-button" name="new-post-button" type="button">Post</button>
+        </div>
+        <div class="new-post-field-row">
+            <label class="new-post-label" for="new-post-password">Password</label>
+            <input id="new-post-password" class="new-post-input" type="password" name="password" placeholder="Deletion password" />
+        </div>
+        <div class="new-post-field-row">
+            <label class="new-post-label" for="new-post-comment">Comment</label>
+            <textarea id="new-post-comment" class="new-post-input" rows="auto" cols="auto"></textarea>
+        </div>
+        <div class="new-post-field-row">
+            <label class="new-post-label" for="new-post-verification">Verification</label>
+            <input id="new-post-verification" class="new-post-input" type="text" name="Comment" />
+        </div>
+        <div class="new-post-field-row">
+            <label class="new-post-label" for="new-post-file">File</label>
+            <input id="new-post-file" class="new-post-file-input" type="file" />
+        </div>
+        <ol class="new-post-bullets">
+            <li>Please read the Rules and FAQ before posting.</li>
+            <li>Maximum file size allowed is 8192 KB.</li>
+            <li>Images greater than 10000x10000 pixels are not allowed.</li>
+        </ol>
+    </form>
+</div>
+{% include "blotter.html" %}
+<p class="support-moarchan">Please <span data-href="/support" class="blue-text-link">support Moarchan</span> by disabling your ad blocker on *.moarchan.org/*, <span data-href="/self-serve" class="blue-text-link">purchasing a self-serve ad</span>, or <span data-href="/pass" class="blue-text-link">buying a moarchan Pass.</span></p>
+<div class="top-container">
+    <input class="search-ops" type="text" placeholder="Search OPs..." />
+    <p class="catalog-link">[<span data-href="/catalog" class="blue-text-link">Catalog</span>]</p>
+</div>
+<div class="board">
+    {% for thread in threads %}
+        {% include "thread-item.html" with context %}
+    {% endfor %}
+</div>
+<div class="bottom-container">
+    <div class="bottom-right-side">
+        Delete Post: [
+        <input class="file-only" type="checkbox" name="file-only" id="delete-file-only">
+        <label for="delete-file-only">File Only</label>]
+        <input type="password" id="delete-post-password" placeholder="Password" class="new-post-input" style="width: 100px; padding: 2px 4px;">
+        <button class="delete grey-button" type="button" name="delete">Delete</button>
+        Style:
+        <select class="select-style grey-button" name="style">
+            <option value="Yotsuba">Yotsuba</option>
+            <option value="Yotsuba B">Yotsuba B</option>
+        </select>
+    </div>
+</div>
+{% include "boards-footer.html" %}

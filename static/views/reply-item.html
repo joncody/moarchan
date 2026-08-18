@@ -1,0 +1,42 @@
+<div class="reply-container">
+    <div class="reply-wrapper">
+        <span class="post-side-arrows">&gt;&gt;</span>
+        <div id="post-{{ hash }}" class="reply">
+            <div class="post-header">
+                <input class="post-checkbox" type="checkbox" />
+                <span class="post-username">{{ name }}</span>
+                <span class="post-date">{{ timestamp }}</span>
+                <span class="post-link-to red-text-link" title="Link to this post">No.</span>
+                <span class="post-reply-to red-text-link" title="Reply to this post" data-thread="{{ thread }}">{{ hash }}</span>
+                <div class="post-options" title="Post menu">
+                    <span class="post-options-arrow" data-post="{{ hash }}"></span>
+                    <ul id="post-menu-{{ hash }}" class="post-options-menu hide">
+                        <li class="report-post" data-post="{{ hash }}">Report Post</li>
+                        <li class="hide-post" data-post="{{ hash }}">Hide Post</li>
+                        <li class="unhide-post" data-post="{{ hash }}">Unhide Post</li>
+                        {% if file_name %}
+                        <li class="image-search" data-post="{{ hash }}">Image Search &gt;&gt;</li>
+                        {% endif %}
+                    </ul>
+                </div>
+                {% for tag in taggedBy %}
+                <span class="post-tag blue-text-link" data-tag="{{ tag }}">&gt;&gt;{{ tag }}</span>
+                {% endfor %}
+            </div>
+            {% if file_name %}
+            <div class="post-image-metadata">
+                File: <a class="post-image-link blue-text-link" href="/static/images/uploads/{{ file_name }}" alt="{{ file_name }}" title="{{ file_name }}" target="_blank">{{ file_name }}</a>
+                <span class="post-image-dimensions">({{ file_size }} KB, {{ file_dimensions }})</span>
+            </div>
+            {% endif %}
+            <div class="reply-body">
+                {% if file_name %}
+                <a class="post-image-container" href="/static/images/uploads/{{ file_name }}" target="_blank">
+                    <img class="post-image" src="/static/images/uploads/thumb_{{ file_name }}" data-full="/static/images/uploads/{{ file_name }}" data-thumb="/static/images/uploads/thumb_{{ file_name }}" title="{{ file_name }}" alt="{{ file_name }}" />
+                </a>
+                {% endif %}
+                <p class="post-content">{{ comment | unescaped }}</p>
+            </div>
+        </div>
+    </div>
+</div>
