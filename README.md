@@ -1,6 +1,6 @@
 # moarchan
 
-[![Rust](https://img.shields.io/badge/Rust-2021_Edition-dea584?style=flat&logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/Rust-2024_Edition-dea584?style=flat&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16+-4169E1?style=flat&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![JavaScript](https://img.shields.io/badge/JavaScript-Vanilla%20ES6+-F7DF1E?style=flat&logo=javascript&logoColor=black)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
 [![Protocol: HTTP/2 & SSE](https://img.shields.io/badge/Protocol-HTTP%2F2%20%7C%20SSE-555555?style=flat)]()
@@ -38,7 +38,7 @@ A high-performance, real-time 4chan clone built from scratch using **Rust**, **A
 
 ## 🛠️ Tech Stack
 
-* **Backend:** Rust (2021 Edition)
+* **Backend:** Rust (2024 Edition)
 * **Web Framework:** [Axum 0.8](https://github.com/tokio-rs/axum) / [Tower](https://github.com/tower-rs/tower) / [Hyper 1.0](https://hyper.rs/)
 * **Async Runtime:** [Tokio](https://tokio.rs/)
 * **Database Driver:** [SQLx (PostgreSQL 16+)](https://github.com/launchbadge/sqlx)
