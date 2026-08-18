@@ -3,6 +3,7 @@ use axum::{
     response::{Html, IntoResponse},
     Json,
 };
+use axum_extra::extract::cookie::PrivateCookieJar;
 use serde::{Deserialize, Serialize};
 use crate::{db::queries::{get_single_thread, get_topic_threads}, error::AppError, state::AppState};
 
@@ -19,10 +20,11 @@ pub struct RenderResponse {
 
 pub async fn base_shell_handler(
     State(state): State<AppState>,
+    jar: PrivateCookieJar,
     req: Request,
 ) -> Result<Html<String>, AppError> {
     let csrf_token = req.extensions().get::<String>().cloned().unwrap_or_default();
-    let session = state.extract_session(req.headers());
+    let session = state.extract_session(&jar);
 
     let ctx = minijinja::context! {
         csrf_token => csrf_token,
@@ -37,10 +39,11 @@ pub async fn base_shell_handler(
 pub async fn render_spa_handler(
     State(state): State<AppState>,
     Query(query): Query<RenderQuery>,
+    jar: PrivateCookieJar,
     req: Request,
 ) -> Result<impl IntoResponse, AppError> {
     let path = query.path.unwrap_or_else(|| "/".into());
-    let session = state.extract_session(req.headers());
+    let session = state.extract_session(&jar);
     let csrf_token = req.extensions().get::<String>().cloned().unwrap_or_default();
 
     let (tmpl_name, ctrls, data) = resolve_route_data(&state, &path).await?;

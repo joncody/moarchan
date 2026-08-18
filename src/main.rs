@@ -8,8 +8,10 @@ mod services;
 mod state;
 mod storage;
 
+use axum_extra::extract::cookie::Key;
 use axum_server::tls_rustls::RustlsConfig;
 use minijinja::Environment;
+use sha2::{Digest, Sha512};
 use sqlx::postgres::PgPoolOptions;
 use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -19,7 +21,7 @@ use crate::{
     db::migrations::run_migrations,
     middleware::rate_limit::IpRateLimiter,
     routes::build_router,
-    services::{session::SessionStore, sse::SseHub},
+    services::sse::SseHub,
     state::AppState,
     storage::local::LocalDiskStorage,
 };
@@ -117,15 +119,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         minijinja::Value::from_safe_string(val.to_string())
     });
 
-    // 7. Initialize Application State Container
+    // 7. Initialize Application State Container & 512-bit AEAD Master Key
     let sse_hub = Arc::new(SseHub::new());
     let rate_limiter = Arc::new(IpRateLimiter::new(2.0, 10)); // 2 req/sec, burst 10
-    let session_store = Arc::new(SessionStore::new(
-        "moarchan",
-        &config.session_hash_key,
-        &config.session_block_key,
-        config.ssl_port > 0,
-    ));
+
+    let mut hasher = Sha512::new();
+    hasher.update(config.session_block_key.as_bytes());
+    hasher.update(config.session_hash_key.as_bytes());
+    let key_bytes = hasher.finalize();
+    let cookie_key = Key::from(&key_bytes);
 
     let state = AppState {
         db: pool.clone(),
@@ -133,7 +135,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         sse_hub: sse_hub.clone(),
         rate_limiter,
         templates: Arc::new(env),
-        session_store,
+        cookie_key,
         config: Arc::new(config.clone()),
     };
 

@@ -1,4 +1,5 @@
-use axum::http::HeaderMap;
+use axum::extract::FromRef;
+use axum_extra::extract::cookie::{Key, PrivateCookieJar};
 use minijinja::Environment;
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -6,9 +7,11 @@ use crate::{
     config::AppConfig,
     middleware::rate_limit::IpRateLimiter,
     models::auth::SessionUser,
-    services::{session::SessionStore, sse::SseHub},
+    services::sse::SseHub,
     storage::StorageBackend,
 };
+
+pub const SESSION_COOKIE_NAME: &str = "moarchan";
 
 #[derive(Clone)]
 pub struct AppState {
@@ -17,9 +20,15 @@ pub struct AppState {
     pub sse_hub: Arc<SseHub>,
     pub rate_limiter: Arc<IpRateLimiter>,
     pub templates: Arc<Environment<'static>>,
-    pub session_store: Arc<SessionStore>,
+    pub cookie_key: Key,
     #[allow(dead_code)]
     pub config: Arc<AppConfig>,
+}
+
+impl FromRef<AppState> for Key {
+    fn from_ref(state: &AppState) -> Self {
+        state.cookie_key.clone()
+    }
 }
 
 impl AppState {
@@ -47,24 +56,8 @@ impl AppState {
         tmpl.render(ctx)
     }
 
-    pub fn extract_session(&self, headers: &HeaderMap) -> Option<SessionUser> {
-        for cookie_header in headers.get_all(axum::http::header::COOKIE) {
-            if let Ok(cookie_str) = cookie_header.to_str() {
-                for cookie in cookie_str.split(';') {
-                    let parts: Vec<&str> = cookie.trim().splitn(2, '=').collect();
-                    if parts.len() == 2 && parts[0] == self.session_store.cookie_name {
-                        if let Ok(map) = self.session_store.decrypt(parts[1]) {
-                            if let (Some(alias), Some(privilege)) = (map.get("alias"), map.get("privilege")) {
-                                return Some(SessionUser {
-                                    alias: alias.clone(),
-                                    privilege: privilege.clone(),
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        None
+    pub fn extract_session(&self, jar: &PrivateCookieJar) -> Option<SessionUser> {
+        let cookie = jar.get(SESSION_COOKIE_NAME)?;
+        serde_json::from_str(cookie.value()).ok()
     }
 }

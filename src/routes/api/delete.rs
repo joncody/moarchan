@@ -4,6 +4,7 @@ use axum::{
     response::IntoResponse,
     Json,
 };
+use axum_extra::extract::cookie::PrivateCookieJar;
 use crate::{
     db::queries::delete_post_or_file,
     error::AppError,
@@ -12,10 +13,11 @@ use crate::{
 
 pub async fn delete_post_handler(
     State(state): State<AppState>,
+    jar: PrivateCookieJar,
     headers: HeaderMap,
     req: Request,
 ) -> Result<impl IntoResponse, AppError> {
-    let is_admin = state.extract_session(&headers).map(|s| s.privilege == "admin").unwrap_or(false);
+    let is_admin = state.extract_session(&jar).map(|s| s.privilege == "admin").unwrap_or(false);
 
     let content_type = headers
         .get(header::CONTENT_TYPE)

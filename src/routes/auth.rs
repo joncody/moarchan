@@ -1,17 +1,18 @@
 use axum::{
     extract::{FromRequest, Multipart, Request, State},
-    http::{header, HeaderMap, HeaderValue, StatusCode},
-    response::IntoResponse,
+    http::{header, HeaderMap, StatusCode},
+    response::{IntoResponse, Redirect},
     Json,
 };
+use axum_extra::extract::cookie::{Cookie, PrivateCookieJar, SameSite};
 use serde::Deserialize;
 use sqlx::Row;
-use std::collections::HashMap;
+use time::Duration;
 use crate::{
     error::AppError,
-    models::auth::AuthRecord,
+    models::auth::{AuthRecord, SessionUser},
     services::auth::{hash_account_password, verify_password},
-    state::AppState,
+    state::{AppState, SESSION_COOKIE_NAME},
 };
 
 #[derive(Default, Deserialize, Debug)]
@@ -97,9 +98,10 @@ fn percent_decode(input: &str) -> String {
 
 pub async fn register_handler(
     State(state): State<AppState>,
+    jar: PrivateCookieJar,
     headers: HeaderMap,
     req: Request,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<(PrivateCookieJar, impl IntoResponse), AppError> {
     let form = extract_auth_form(&headers, req, &state).await?;
 
     if form.alias.len() < 3 || form.password.len() < 8 {
@@ -122,23 +124,30 @@ pub async fn register_handler(
     .await
     .map_err(|_| AppError::BadRequest("Alias already taken".into()))?;
 
-    let mut session_map = HashMap::new();
-    session_map.insert("alias".into(), form.alias);
-    session_map.insert("privilege".into(), "user".into());
-    let token = state.session_store.encrypt(&session_map)?;
+    let session_user = SessionUser {
+        alias: form.alias,
+        privilege: "user".into(),
+    };
+    let session_json = serde_json::to_string(&session_user).map_err(|e| AppError::Internal(anyhow::anyhow!(e)))?;
 
-    let cookie = state.session_store.cookie_value(&token);
-    let mut resp_headers = HeaderMap::new();
-    resp_headers.insert(header::SET_COOKIE, HeaderValue::from_str(&cookie).unwrap());
+    let mut cookie = Cookie::new(SESSION_COOKIE_NAME, session_json);
+    cookie.set_path("/");
+    cookie.set_max_age(Some(Duration::days(1)));
+    cookie.set_http_only(true);
+    cookie.set_same_site(SameSite::Lax);
+    if state.config.ssl_port > 0 || state.config.tls_cert_path.is_some() {
+        cookie.set_secure(true);
+    }
 
-    Ok((StatusCode::OK, resp_headers, Json(serde_json::json!({"status": "ok"}))))
+    Ok((jar.add(cookie), (StatusCode::OK, Json(serde_json::json!({"status": "ok"})))))
 }
 
 pub async fn login_handler(
     State(state): State<AppState>,
+    jar: PrivateCookieJar,
     headers: HeaderMap,
     req: Request,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<(PrivateCookieJar, impl IntoResponse), AppError> {
     let form = extract_auth_form(&headers, req, &state).await?;
 
     let row = sqlx::query("SELECT value FROM auth WHERE key = $1")
@@ -163,22 +172,26 @@ pub async fn login_handler(
         return Err(AppError::Unauthorized("Invalid username or password".into()));
     }
 
-    let mut session_map = HashMap::new();
-    session_map.insert("alias".into(), form.alias);
-    session_map.insert("privilege".into(), privilege);
-    let token = state.session_store.encrypt(&session_map)?;
+    let session_user = SessionUser {
+        alias: form.alias,
+        privilege,
+    };
+    let session_json = serde_json::to_string(&session_user).map_err(|e| AppError::Internal(anyhow::anyhow!(e)))?;
 
-    let cookie = state.session_store.cookie_value(&token);
-    let mut resp_headers = HeaderMap::new();
-    resp_headers.insert(header::SET_COOKIE, HeaderValue::from_str(&cookie).unwrap());
+    let mut cookie = Cookie::new(SESSION_COOKIE_NAME, session_json);
+    cookie.set_path("/");
+    cookie.set_max_age(Some(Duration::days(1)));
+    cookie.set_http_only(true);
+    cookie.set_same_site(SameSite::Lax);
+    if state.config.ssl_port > 0 || state.config.tls_cert_path.is_some() {
+        cookie.set_secure(true);
+    }
 
-    Ok((StatusCode::OK, resp_headers, Json(serde_json::json!({"status": "ok"}))))
+    Ok((jar.add(cookie), (StatusCode::OK, Json(serde_json::json!({"status": "ok"})))))
 }
 
-pub async fn logout_handler(State(state): State<AppState>) -> impl IntoResponse {
-    let cookie = state.session_store.delete_cookie_value();
-    let mut headers = HeaderMap::new();
-    headers.insert(header::SET_COOKIE, HeaderValue::from_str(&cookie).unwrap());
-    headers.insert(header::LOCATION, HeaderValue::from_static("/"));
-    (StatusCode::SEE_OTHER, headers)
+pub async fn logout_handler(jar: PrivateCookieJar) -> impl IntoResponse {
+    let mut cookie = Cookie::new(SESSION_COOKIE_NAME, "");
+    cookie.set_path("/");
+    (jar.remove(cookie), Redirect::to("/"))
 }
