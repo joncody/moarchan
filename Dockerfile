@@ -1,7 +1,7 @@
 # ------------------------------------------------------------------------------
 # Stage 1: Build Application Binary with Layered Dependency Caching
 # ------------------------------------------------------------------------------
-FROM rust:1.80-alpine AS builder
+FROM rust:alpine AS builder
 
 WORKDIR /app
 
@@ -9,7 +9,7 @@ WORKDIR /app
 RUN apk add --no-cache musl-dev openssl-dev pkgconfig
 
 # Copy dependency manifests first to cache compiled crates
-COPY Cargo.toml Cargo.lock ./
+COPY Cargo.toml Cargo.lock* ./
 
 # Create dummy entrypoint to pre-build dependencies into Docker layer cache
 RUN mkdir src && echo "fn main() {}" > src/main.rs \
