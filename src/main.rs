@@ -24,6 +24,31 @@ use crate::{
     storage::local::LocalDiskStorage,
 };
 
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to install Ctrl+C signal handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        if let Ok(mut stream) = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            stream.recv().await;
+        }
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+
+    tracing::info!("Shutdown signal received, draining active connections...");
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 1. Structured Logging Setup (Shows latency timers while suppressing socket trace noise)
@@ -67,7 +92,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let file_name = path.file_name().and_then(|s| s.to_str()).unwrap_or("").to_string();
                     let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
                     if !file_name.is_empty() {
-                        let _ = env.add_template_owned(file_name, content.clone());
+                        if let Err(e) = env.add_template_owned(file_name.clone(), content.clone()) {
+                            tracing::error!("Failed to parse template '{}': {}", file_name, e);
+                        }
                     }
                     if !stem.is_empty() {
                         let _ = env.add_template_owned(stem, content);
@@ -116,7 +143,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 9. Build Master Axum Router
     let app = build_router(state);
 
-    // 10. HTTP/2 Server Launch (Automatic TLS / HTTP/2 when certs exist)
+    // 10. HTTP/2 Server Launch with Graceful Shutdown
     let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
 
     let cert_file = config.tls_cert_path.as_deref().or_else(|| {
@@ -134,15 +161,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .await?;
 
+        let handle = axum_server::Handle::new();
+        let handle_clone = handle.clone();
+        tokio::spawn(async move {
+            shutdown_signal().await;
+            handle_clone.graceful_shutdown(Some(Duration::from_secs(10)));
+        });
+
         tracing::info!("MoarChan HTTP/2 server listening on https://{}", addr);
         axum_server::bind_rustls(addr, tls_config)
+            .handle(handle)
             .serve(app.into_make_service_with_connect_info::<SocketAddr>())
             .await?;
     } else {
         tracing::info!("Starting Axum cleartext server on http://{}", addr);
         let listener = tokio::net::TcpListener::bind(addr).await?;
-        axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await?;
+        axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
+            .with_graceful_shutdown(shutdown_signal())
+            .await?;
     }
 
+    tracing::info!("Server shut down gracefully.");
     Ok(())
 }

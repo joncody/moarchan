@@ -21,7 +21,7 @@
             <div class="post-header op">
                 <input class="post-checkbox op" type="checkbox" />
                 <span class="post-subject op">{{ subject }}</span>
-                <span class="post-username op">{{ name }}</span>
+                <span class="post-username op">{{ name | unescaped }}</span>
                 <span class="post-date op">{{ timestamp }}</span>
                 <span class="post-link-to red-text-link op" title="Link to this post" data-href="/{{ topic }}/thread/{{ hash }}">No.</span>
                 <span class="post-reply-to red-text-link op" title="Reply to this post" data-thread="{{ hash }}">{{ hash }}</span>

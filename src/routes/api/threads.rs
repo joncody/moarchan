@@ -4,15 +4,18 @@ use axum::{
     response::IntoResponse,
     Json,
 };
+use sqlx::Row;
 use crate::{
     error::AppError,
     services::{
         auth::hash_password,
         image::process_upload,
-        sanitizer::{generate_unique_identifiers, sanitize_comment},
+        sanitizer::{generate_unique_identifiers, sanitize_comment, sanitize_name},
     },
     state::AppState,
 };
+
+pub const MAX_THREADS_PER_BOARD: i64 = 100;
 
 pub async fn create_thread_handler(
     State(state): State<AppState>,
@@ -56,7 +59,7 @@ pub async fn create_thread_handler(
     let processed_image = process_upload(raw_bytes, &orig_filename, &hash, state.storage.as_ref()).await?;
 
     let (comment, _) = sanitize_comment(&raw_comment);
-    let final_name = if name.is_empty() { "Anonymous".to_string() } else { html_escape::encode_safe(&name).to_string() };
+    let final_name = sanitize_name(&name, &state.config.session_hash_key);
     let final_subject = html_escape::encode_safe(&subject).to_string();
     let pass_hash = hash_password(&password).await?;
 
@@ -80,6 +83,64 @@ pub async fn create_thread_handler(
     .bind(&timestamp)
     .execute(&state.db)
     .await?;
+
+    // Finite Board Capacity: Prune oldest threads exceeding MAX_THREADS_PER_BOARD limit
+    let pruned_records = sqlx::query(
+        r#"
+        SELECT hash, file_name
+        FROM threads
+        WHERE topic = $1
+        ORDER BY bumped_at DESC
+        OFFSET $2
+        "#
+    )
+    .bind(&clean_topic)
+    .bind(MAX_THREADS_PER_BOARD)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    for pt in pruned_records {
+        if let Ok(p_hash) = pt.try_get::<String, _>("hash") {
+            let p_file = pt.try_get::<String, _>("file_name").unwrap_or_default();
+
+            let reply_files = sqlx::query(
+                "SELECT file_name FROM posts WHERE thread_hash = $1 AND file_name != ''"
+            )
+            .bind(&p_hash)
+            .fetch_all(&state.db)
+            .await
+            .unwrap_or_default();
+
+            let _ = sqlx::query("DELETE FROM threads WHERE hash = $1")
+                .bind(&p_hash)
+                .execute(&state.db)
+                .await;
+
+            let storage = state.storage.clone();
+            tokio::spawn(async move {
+                if !p_file.is_empty() {
+                    let _ = storage.delete(&p_file).await;
+                    let _ = storage.delete(&format!("thumb_{p_file}")).await;
+                }
+                for rf in reply_files {
+                    if let Ok(rfn) = rf.try_get::<String, _>("file_name") {
+                        if !rfn.is_empty() {
+                            let _ = storage.delete(&rfn).await;
+                            let _ = storage.delete(&format!("thumb_{rfn}")).await;
+                        }
+                    }
+                }
+            });
+
+            let prune_event = serde_json::json!({
+                "hash": p_hash,
+                "topic": clean_topic,
+                "file_only": false
+            });
+            state.sse_hub.broadcast(&state.db, &clean_topic, "delete-post", prune_event).await;
+        }
+    }
 
     let mut thread_json = serde_json::json!({
         "hash": hash,

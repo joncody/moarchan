@@ -10,10 +10,12 @@ use crate::{
     services::{
         auth::hash_password,
         image::process_upload,
-        sanitizer::{generate_unique_identifiers, sanitize_comment},
+        sanitizer::{generate_unique_identifiers, sanitize_comment, sanitize_name},
     },
     state::AppState,
 };
+
+pub const BUMP_LIMIT: i64 = 300;
 
 pub async fn create_reply_handler(
     State(state): State<AppState>,
@@ -64,7 +66,7 @@ pub async fn create_reply_handler(
     };
 
     let (comment, tags) = sanitize_comment(&raw_comment);
-    let final_name = if name.is_empty() { "Anonymous".to_string() } else { html_escape::encode_safe(&name).to_string() };
+    let final_name = sanitize_name(&name, &state.config.session_hash_key);
     let pass_hash = hash_password(&password).await?;
 
     let mut tx = state.db.begin().await?;
@@ -121,7 +123,16 @@ pub async fn create_reply_handler(
         .await?;
     }
 
-    if !options.to_lowercase().contains("sage") {
+    let reply_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM posts WHERE thread_hash = $1"
+    )
+    .bind(&thread_hash)
+    .fetch_one(&mut *tx)
+    .await
+    .unwrap_or(0);
+
+    // Bump thread unless 'sage' option is given or thread has reached the bump limit
+    if !options.to_lowercase().contains("sage") && reply_count <= BUMP_LIMIT {
         sqlx::query("UPDATE threads SET bumped_at = CURRENT_TIMESTAMP WHERE hash = $1")
             .bind(&thread_hash)
             .execute(&mut *tx)

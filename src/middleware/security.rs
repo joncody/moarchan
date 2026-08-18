@@ -12,5 +12,9 @@ pub async fn security_headers_middleware(req: Request, next: Next) -> Response {
     h.insert(header::X_CONTENT_TYPE_OPTIONS, "nosniff".parse().unwrap());
     h.insert(header::X_FRAME_OPTIONS, "DENY".parse().unwrap());
     h.insert(header::X_XSS_PROTECTION, "1; mode=block".parse().unwrap());
+    h.insert(
+        header::CONTENT_SECURITY_POLICY,
+        "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none';".parse().unwrap(),
+    );
     resp
 }

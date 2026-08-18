@@ -4,7 +4,7 @@
         <div id="post-{{ hash }}" class="reply">
             <div class="post-header">
                 <input class="post-checkbox" type="checkbox" />
-                <span class="post-username">{{ name }}</span>
+                <span class="post-username">{{ name | unescaped }}</span>
                 <span class="post-date">{{ timestamp }}</span>
                 <span class="post-link-to red-text-link" title="Link to this post">No.</span>
                 <span class="post-reply-to red-text-link" title="Reply to this post" data-thread="{{ thread }}">{{ hash }}</span>
