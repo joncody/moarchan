@@ -30,7 +30,8 @@ function createApplication() {
     };
 
     /**
-     * Extracts the CSRF token from the meta tag in the document head.
+     * Extracts the CSRF token from the meta tag in the document head,
+     * falling back to reading the moarchan_csrf cookie from document.cookie.
      *
      * @returns {string} The CSRF token string, or an empty string if absent.
      */
@@ -38,6 +39,19 @@ function createApplication() {
         const meta = document.querySelector("meta[name=\"csrf-token\"]");
         if (meta !== null && meta.content) {
             return meta.content;
+        }
+        if (typeof document !== "undefined" && typeof document.cookie === "string") {
+            const cookies = document.cookie.split(";");
+            let token = "";
+            cookies.forEach(function (c) {
+                const parts = c.trim().split("=");
+                if (parts.length === 2 && parts[0] === "moarchan_csrf") {
+                    token = parts[1];
+                }
+            });
+            if (token) {
+                return token;
+            }
         }
         return "";
     }

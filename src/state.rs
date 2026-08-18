@@ -48,16 +48,19 @@ impl AppState {
     }
 
     pub fn extract_session(&self, headers: &HeaderMap) -> Option<SessionUser> {
-        let cookie_header = headers.get(axum::http::header::COOKIE)?.to_str().ok()?;
-        for cookie in cookie_header.split(';') {
-            let parts: Vec<&str> = cookie.trim().splitn(2, '=').collect();
-            if parts.len() == 2 && parts[0] == self.session_store.cookie_name {
-                if let Ok(map) = self.session_store.decrypt(parts[1]) {
-                    if let (Some(alias), Some(privilege)) = (map.get("alias"), map.get("privilege")) {
-                        return Some(SessionUser {
-                            alias: alias.clone(),
-                            privilege: privilege.clone(),
-                        });
+        for cookie_header in headers.get_all(axum::http::header::COOKIE) {
+            if let Ok(cookie_str) = cookie_header.to_str() {
+                for cookie in cookie_str.split(';') {
+                    let parts: Vec<&str> = cookie.trim().splitn(2, '=').collect();
+                    if parts.len() == 2 && parts[0] == self.session_store.cookie_name {
+                        if let Ok(map) = self.session_store.decrypt(parts[1]) {
+                            if let (Some(alias), Some(privilege)) = (map.get("alias"), map.get("privilege")) {
+                                return Some(SessionUser {
+                                    alias: alias.clone(),
+                                    privilege: privilege.clone(),
+                                });
+                            }
+                        }
                     }
                 }
             }

@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Request, State},
+    extract::{ConnectInfo, Request, State},
     http::{Method, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
@@ -71,23 +71,45 @@ pub async fn rate_limit_middleware(
     next: Next,
 ) -> Response {
     if matches!(req.method(), &Method::POST | &Method::PUT | &Method::DELETE) {
-        let ip = req
-            .headers()
-            .get("x-forwarded-for")
-            .and_then(|v| v.to_str().ok())
-            .map(|s| s.split(',').next().unwrap_or("").trim().to_string())
-            .or_else(|| {
-                req.headers()
-                    .get("x-real-ip")
-                    .and_then(|v| v.to_str().ok())
-                    .map(String::from)
-            })
+        let socket_ip = req
+            .extensions()
+            .get::<ConnectInfo<SocketAddr>>()
+            .map(|ci| ci.0.ip())
             .or_else(|| {
                 req.extensions()
                     .get::<SocketAddr>()
-                    .map(|addr| addr.ip().to_string())
-            })
-            .unwrap_or_else(|| "127.0.0.1".to_string());
+                    .map(|addr| addr.ip())
+            });
+
+        let ip = if let Some(sock_ip) = socket_ip {
+            if sock_ip.is_loopback() {
+                req.headers()
+                    .get("x-forwarded-for")
+                    .and_then(|v| v.to_str().ok())
+                    .map(|s| s.split(',').next().unwrap_or("").trim().to_string())
+                    .or_else(|| {
+                        req.headers()
+                            .get("x-real-ip")
+                            .and_then(|v| v.to_str().ok())
+                            .map(String::from)
+                    })
+                    .unwrap_or_else(|| sock_ip.to_string())
+            } else {
+                sock_ip.to_string()
+            }
+        } else {
+            req.headers()
+                .get("x-forwarded-for")
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.split(',').next().unwrap_or("").trim().to_string())
+                .or_else(|| {
+                    req.headers()
+                        .get("x-real-ip")
+                        .and_then(|v| v.to_str().ok())
+                        .map(String::from)
+                })
+                .unwrap_or_else(|| "127.0.0.1".to_string())
+        };
 
         if !limiter.allow(&ip) {
             return (

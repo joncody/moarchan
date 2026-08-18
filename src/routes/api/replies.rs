@@ -106,6 +106,21 @@ pub async fn create_reply_handler(
     .execute(&mut *tx)
     .await?;
 
+    if !tags.is_empty() {
+        let tag_val = serde_json::json!([hash]);
+        sqlx::query(
+            r#"
+            UPDATE posts
+            SET tagged_by = COALESCE(tagged_by, '[]'::jsonb) || $1::jsonb
+            WHERE hash = ANY($2) AND NOT (COALESCE(tagged_by, '[]'::jsonb) @> $1::jsonb)
+            "#
+        )
+        .bind(&tag_val)
+        .bind(&tags)
+        .execute(&mut *tx)
+        .await?;
+    }
+
     if !options.to_lowercase().contains("sage") {
         sqlx::query("UPDATE threads SET bumped_at = CURRENT_TIMESTAMP WHERE hash = $1")
             .bind(&thread_hash)

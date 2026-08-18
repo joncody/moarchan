@@ -62,7 +62,11 @@
     </li><li data-href="/wsg" title="/wsg"><span>wsg</span> /
     </li><li data-href="/x" title="/x"><span>x</span> ]
     </li><li class="home-link" data-href="/" title="Home">[ <span>Home</span> ]
+    {% if alias %}
+    </li><li class="auth-nav-link" data-action="logout" title="Logout">[ <span class="red-text-link">Logout ({{ alias }})</span> ]
+    {% else %}
     </li><li class="auth-nav-link" data-href="/auth" title="Auth">[ <span>Login/Register</span> ]
+    {% endif %}
     </li><li class="settings-link">[ <span>Settings</span> ]</li>
 </nav>
 </div>

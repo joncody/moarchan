@@ -15,7 +15,7 @@ pub const CSRF_HEADER: &str = "X-CSRF-Token";
 pub async fn csrf_middleware(mut req: Request, next: Next) -> Response {
     let mut cookie_token = None;
 
-    if let Some(cookie_header) = req.headers().get(header::COOKIE) {
+    for cookie_header in req.headers().get_all(header::COOKIE) {
         if let Ok(cookie_str) = cookie_header.to_str() {
             for c in cookie_str.split(';') {
                 let parts: Vec<&str> = c.trim().splitn(2, '=').collect();
@@ -24,6 +24,9 @@ pub async fn csrf_middleware(mut req: Request, next: Next) -> Response {
                     break;
                 }
             }
+        }
+        if cookie_token.is_some() {
+            break;
         }
     }
 
@@ -47,8 +50,8 @@ pub async fn csrf_middleware(mut req: Request, next: Next) -> Response {
             .and_then(|h| h.to_str().ok())
             .unwrap_or("");
 
-        if !header_token.is_empty()
-            && header_token.as_bytes().ct_eq(token.as_bytes()).unwrap_u8() != 1
+        if header_token.is_empty()
+            || header_token.as_bytes().ct_eq(token.as_bytes()).unwrap_u8() != 1
         {
             return (
                 StatusCode::FORBIDDEN,

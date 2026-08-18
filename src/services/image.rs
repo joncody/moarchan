@@ -27,17 +27,14 @@ pub async fn process_upload(
     let uid = unique_id.to_string();
 
     let processed = tokio::task::spawn_blocking(move || -> Result<ProcessedImageResult, AppError> {
-        let ext = std::path::Path::new(&orig_name)
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("")
-            .to_lowercase();
+        let detected_format = image::guess_format(&raw_bytes)
+            .map_err(|_| AppError::Image("Unable to determine image format or file corrupted".into()))?;
 
-        let (format, mime) = match ext.as_str() {
-            "jpg" | "jpeg" => (ImageFormat::Jpeg, "image/jpeg"),
-            "png" => (ImageFormat::Png, "image/png"),
-            "gif" => (ImageFormat::Gif, "image/gif"),
-            _ => return Err(AppError::Image(format!("Unsupported file extension: .{ext}"))),
+        let (format, mime) = match detected_format {
+            ImageFormat::Jpeg => (ImageFormat::Jpeg, "image/jpeg"),
+            ImageFormat::Png => (ImageFormat::Png, "image/png"),
+            ImageFormat::Gif => (ImageFormat::Gif, "image/gif"),
+            _ => return Err(AppError::Image("Unsupported image format. Allowed formats: JPEG, PNG, GIF".into())),
         };
 
         // 1. Fast header dimension validation without decompressing full image
