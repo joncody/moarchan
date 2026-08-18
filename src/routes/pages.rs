@@ -70,8 +70,15 @@ async fn resolve_route_data(
 
     match segments.as_slice() {
         [] => Ok(("main".into(), vec!["main".into()], serde_json::json!({}))),
+        ["about"] => Ok(("about".into(), vec![], serde_json::json!({}))),
+        ["advertise"] => Ok(("advertise".into(), vec![], serde_json::json!({}))),
+        ["blog"] => Ok(("blog".into(), vec![], serde_json::json!({}))),
+        ["contact"] => Ok(("contact".into(), vec![], serde_json::json!({}))),
+        ["feedback"] => Ok(("feedback".into(), vec![], serde_json::json!({}))),
+        ["legal"] => Ok(("legal".into(), vec![], serde_json::json!({}))),
         ["news"] => Ok(("news".into(), vec![], serde_json::json!({}))),
         ["faq"] => Ok(("faq".into(), vec![], serde_json::json!({}))),
+        ["press"] => Ok(("press".into(), vec![], serde_json::json!({}))),
         ["rules"] => Ok(("rules".into(), vec![], serde_json::json!({}))),
         ["auth"] => Ok(("auth".into(), vec!["auth".into()], serde_json::json!({}))),
         [topic] => {

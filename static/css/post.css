@@ -110,6 +110,10 @@ POST
     font-weight: bold;
     color: #117743;
 }
+.post-tripcode {
+    color: #228854;
+    font-weight: normal;
+}
 .post-date {
     color: #111;
 }
