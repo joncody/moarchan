@@ -3,34 +3,35 @@
 [![Rust](https://img.shields.io/badge/Rust-2024_Edition-dea584?style=flat&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16+-4169E1?style=flat&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![JavaScript](https://img.shields.io/badge/JavaScript-Vanilla%20ES6+-F7DF1E?style=flat&logo=javascript&logoColor=black)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
-[![Protocol: HTTP/2 & SSE](https://img.shields.io/badge/Protocol-HTTP%2F2%20%7C%20SSE-555555?style=flat)]()
+[![Protocol](https://img.shields.io/badge/Protocol-HTTP%2F3%20%7C%20QUIC%20%7C%20SSE-555555?style=flat)]()
+[![Gateway](https://img.shields.io/badge/Gateway-Caddy%202-00ADD8?style=flat&logo=caddy&logoColor=white)](https://caddyserver.com/)
 [![Docker Compose](https://img.shields.io/badge/Docker-Compose%20Ready-2496ED?style=flat&logo=docker&logoColor=white)](https://www.docker.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A high-performance, real-time 4chan clone built from scratch using **Rust (2024 Edition)**, **Axum**, **Tokio**, **HTTP/2**, **Server-Sent Events (SSE)**, **PostgreSQL (`LISTEN / NOTIFY`)**, and **Vanilla JavaScript** (strictly following Douglas Crockford's coding standards).
+A high-performance, real-time 4chan clone built from scratch using **Rust (2024 Edition)**, **Axum**, **Tokio**, **HTTP/3 over QUIC**, **Server-Sent Events (SSE)**, **PostgreSQL (`LISTEN / NOTIFY`)**, and **Vanilla JavaScript** (strictly adhering to Douglas Crockford's coding standards).
 
 ---
 
 ## 🚀 Key Features
 
-* **HTTP/2 & Real-Time SSE Bus:** Multiplexed Server-Sent Events distributed horizontally across instances using PostgreSQL `LISTEN / NOTIFY` with compact JSON descriptors and database hydration fallback.
-* **Stream Backpressure & Lag Resilience:** Resilient broadcast channel handling catching Tokio stream lag to emit `sync-required` events, preventing silent socket disconnects on slow connections.
-* **Declarative AEAD Cookie Sessions:** Cryptographically sealed client sessions utilizing `axum-extra`'s `PrivateCookieJar` with 512-bit SHA-512 master key expansion and zero runtime database lookup overhead.
+* **HTTP/3 & QUIC Transport:** Ultra-low-latency 0-RTT UDP transport eliminating Head-of-Line (HoL) blocking across media loading and live event streams, with automated `Alt-Svc` header discovery and Encrypted Client Hello (ECH) compatibility.
+* **Distributed Real-Time SSE Hub:** Horizontally scalable pub/sub powered by PostgreSQL `LISTEN / NOTIFY` featuring `instance_id` origin-tagging to prevent local duplicate event fanout, plus payload hydration fallback for large frames (>7.5 KB).
+* **Stream Backpressure & Lag Recovery:** Resilient Tokio broadcast handling that catches buffer lag to dispatch `sync-required` events, automatically triggering seamless client-side rehydration.
+* **Bidirectional Live Backlinks:** Automatic real-time DOM injection of `>>hash` quote backlinks across both OPs and replies upon receiving live SSE reply events.
+* **Declarative AEAD Cookie Sessions:** Cryptographically sealed client sessions utilizing `axum-extra`'s `PrivateCookieJar` with 512-bit SHA-512 master key expansion and zero database lookup overhead.
 * **Finite Board Capacity & Auto-Pruning:** Strictly enforced board limits (100 threads per board) with automated asynchronous cascade deletion of orphaned media files ($O(1)$ storage ceiling).
-* **Chronological Bumping & Bump Limit:** Real-time thread bumping with `bumped_at` timestamps, chronological reply ordering via PostgreSQL `jsonb_agg`, `sage` bypass, and an automated 300-reply bump limit.
+* **Indexed Subquery Query Planning:** Board indexing using derived subquery limits (`LIMIT 100`) to eliminate full-table scan bottlenecks across active boards.
+* **Chronological Bumping & Bump Limit:** Real-time thread bumping with `bumped_at` timestamps, chronological reply ordering, `sage` bypass, and an automated 300-reply bump limit.
 * **Classic & Secure Tripcode Engine:** Native parser for traditional (`#password`) and salted secure (`##password`) tripcodes with dedicated styling.
-* **Pluggable Storage Abstraction:** Abstracted `StorageBackend` trait supporting local disk storage and cloud object stores (S3, MinIO, GCS) with non-blocking concurrent file writes and atomic thumbnail rollbacks.
-* **High-Fidelity Fast Thumbnails:** High-performance integer downsampling using the `image` crate with strict dimension bomb defenses (10000x10000px validation), magic-byte format verification, and EXIF metadata stripping.
+* **Alpha-Safe High-Fidelity Thumbnails:** Fast integer downsampling using the `image` crate with strict dimension bomb defenses (10000x10000px validation), magic-byte format verification, EXIF stripping, and RGB8 flattening for alpha transparency safety.
 * **Zero-I/O Template Engine:** In-memory pre-cached MiniJinja template rendering compiled directly into RAM on startup for sub-millisecond page and item assembly.
-* **Transactional Versioned Migrations:** Robust, run-once schema migrations (`schema_migrations` tracking table) executing within atomic transactions, eliminating boot-time `UPDATE` backfill bottlenecks.
-* **IPv6 Subnet-Aware Rate Limiting:** Token-bucket IP rate limiter (2 req/sec, burst 10) with `/64` subnet masking to prevent rate-limit evasion through IPv6 address rotation.
-* **Double-Submit CSRF Protection:** Timing-attack resistant CSRF middleware utilizing `subtle::ConstantTimeEq`, non-HttpOnly cookie distribution, HTML meta injection, and client-side `X-CSRF-Token` validation.
+* **IPv6 Subnet-Aware & Proxy-Trusted Rate Limiting:** Token-bucket IP rate limiter (2 req/sec, burst 10) with `/64` CIDR bitmasking and RFC1918 / ULA / loopback reverse-proxy IP extraction.
+* **Universal Double-Submit CSRF Protection:** Timing-attack resistant verification (`subtle::ConstantTimeEq`) enforced across all state-mutating HTTP methods (`POST`, `PUT`, `DELETE`, `PATCH`).
 * **Pure Crockfordian JavaScript:** Modular client-side SPA runtime written with zero usage of `this`, `class`, `var`, `new` (in application code), or `void` operators.
 * **Componentized Frontend Architecture:** Decomposed into dedicated ES modules (`post-renderer`, `tag-hover`, `reply-box`, `post-actions`, `post-form`) with explicit lifecycle teardowns to prevent memory leaks.
-* **In-Place Image Expansion:** Clickable thumbnail expansion within the feed and thread views, with filename links directly opening raw full-resolution uploads in a new tab.
-* **HTML5 History API Routing:** Clean URLs (`/g`, `/g/thread/a1b2c3d4e`, static views) with deep-linking support and History API client navigation.
-* **Graceful Shutdown & Draining:** Integrated `SIGINT`/`SIGTERM` signal listening with active TCP connection draining for both cleartext and ALPN TLS HTTP/2 servers.
-* **OWASP Hardened:** Includes strict Content Security Policy (CSP), Slowloris protection, XSS sanitization, timing-attack resistant password verification (`bcrypt`), and defensive security headers (`nosniff`, `DENY`, `mode=block`).
+* **In-Place Image Expansion:** Clickable thumbnail expansion within feed and thread views, with clean DOM removal of outer reply containers on deletion.
+* **HTML5 History API Routing:** Clean URLs (`/g`, `/g/thread/a1b2c3d4e`, static views) with deep-linking support and history navigation.
+* **Graceful Shutdown & Draining:** Integrated `SIGINT`/`SIGTERM` signal listening with active connection draining.
 
 ---
 
@@ -43,25 +44,27 @@ A high-performance, real-time 4chan clone built from scratch using **Rust (2024 
 
 * **Backend:** Rust (2024 Edition)
 * **Web Framework:** [Axum 0.8](https://github.com/tokio-rs/axum) / [Axum-Extra 0.12](https://docs.rs/axum-extra) / [Tower](https://github.com/tower-rs/tower) / [Hyper 1.0](https://hyper.rs/)
-* **Async Runtime:** [Tokio](https://tokio.rs/)
+* **Async Runtime:** [Tokio 1.43](https://tokio.rs/)
 * **Database Driver:** [SQLx (PostgreSQL 16+)](https://github.com/launchbadge/sqlx)
+* **Gateway & Edge:** [Caddy 2](https://caddyserver.com/) (Automated TLS, HTTP/3 QUIC & ECH)
 * **Template Engine:** [MiniJinja](https://github.com/mitsuhiko/minijinja) (In-Memory Pre-cached)
-* **Image Processing:** `image` crate (Fast integer downsampling & magic-byte sniffing)
+* **Image Processing:** `image` crate (Fast integer downsampling, EXIF stripping & magic-byte sniffing)
 * **Frontend:** Vanilla JavaScript (ES6 Modules, Crockfordian), HTML5, CSS3
-* **Protocol:** HTTP/2 over TLS (ALPN `h2`) / Cleartext HTTP / Server-Sent Events (SSE)
+* **Protocols:** HTTP/3 over QUIC (UDP 443) / HTTP/2 / Server-Sent Events (SSE)
 * **Sessions:** AES-256-GCM Encrypted `PrivateCookieJar` (`axum-extra`)
 
 ---
 
 ## 📋 Prerequisites
 
-* **Rust** `1.85+` (Cargo)
-* **PostgreSQL** `16+` (or Docker)
-* **OpenSSL** (optional, for local HTTP/2 TLS certificates)
+* **Docker & Docker Compose** (Recommended)
+* *Or for local bare-metal development:* **Rust 1.85+** and **PostgreSQL 16+**
 
 ---
 
-## 🏁 Quick Start (Local Development)
+## 🏁 Quick Start (Production & Local Docker)
+
+The fastest and most reliable way to run MoarChan with full HTTP/3 (QUIC) and automated TLS is using Docker Compose:
 
 ### 1. Clone the Repository
 ```bash
@@ -69,20 +72,15 @@ git clone https://github.com/joncody/moarchan.git
 cd moarchan
 ```
 
-### 2. Create the Local PostgreSQL Database
-Log into your local PostgreSQL CLI and create the database:
-```sql
-CREATE DATABASE moarchan;
-```
-
-### 3. Configure Environment Variables
-Create a `.env` file in the root project directory:
+### 2. Configure Environment Variables
+Create a `.env` file in the root directory:
 ```ini
+DOMAIN=localhost
 PORT=9001
-POSTGRES_HOST=localhost
+POSTGRES_HOST=db
 POSTGRES_PORT=5432
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres
+POSTGRES_USER=moarchan
+POSTGRES_PASSWORD=moarchan
 POSTGRES_DB=moarchan
 POSTGRES_SSLMODE=disable
 SESSION_HASH_KEY=12345678901234567890123456789012
@@ -92,26 +90,40 @@ UPLOAD_URL_PREFIX=/static/images/uploads
 VIEWS_PATH=./static/views
 ```
 
-*(Optional: For local ALPN HTTP/2 over TLS, generate self-signed certificates:)*
+> **For Production Domains:** Change `DOMAIN=localhost` to `DOMAIN=yourdomain.com`. Caddy will automatically provision trusted Let's Encrypt / ZeroSSL certificates and configure HTTP/3 over QUIC on UDP port 443.
+
+### 3. Build and Start
 ```bash
-openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes -subj "/CN=localhost"
+docker compose up --build -d
 ```
 
-### 4. Build and Run
-```bash
-cargo run --release
-```
-
-Navigate to `http://localhost:9001` (or `https://localhost:9001` if TLS certs are present) in your browser.
+Navigate to `https://localhost` (or `https://yourdomain.com`) in your browser.
 
 ---
 
-## 🐳 Running with Docker Compose
+## 🧪 Testing the Deployment
 
-If you prefer running the application and database together in containerized environments:
-
+### 1. Verify HTTP/3 (QUIC over UDP)
+Test the HTTP/3 UDP handshake using a containerized HTTP/3 client:
 ```bash
-docker-compose up --build
+docker run --rm --net=host ymuski/curl-http3 curl -k --http3-only -I https://localhost
+```
+
+### 2. Verify Rate Limiting (Burst Defense)
+Send 15 rapid POST requests to observe the token bucket trigger `HTTP 429`:
+```bash
+for i in {1..15}; do
+  curl -k -s -o /dev/null -w "Request $i: HTTP %{http_code}\n" -X POST https://localhost/api/threads
+done
+```
+
+### 3. Verify CSRF Protection
+Ensure unauthenticated mutating requests are rejected:
+```bash
+curl -k -X POST https://localhost/api/threads \
+  -H "Content-Type: application/json" \
+  -d '{"topic":"g","comment":"Unauthorized"}'
+# Output: {"error":"CSRF token validation failed","status":403}
 ```
 
 ---
@@ -120,11 +132,12 @@ docker-compose up --build
 
 | Environment Variable | Default Value | Description |
 | :--- | :--- | :--- |
-| `PORT` | `9001` | Server HTTP port |
-| `POSTGRES_HOST` | `localhost` | PostgreSQL host address |
+| `DOMAIN` | `localhost` | Domain name for automated TLS and HTTP/3 gateway |
+| `PORT` | `9001` | Internal server HTTP port |
+| `POSTGRES_HOST` | `db` | PostgreSQL host address |
 | `POSTGRES_PORT` | `5432` | PostgreSQL port |
-| `POSTGRES_USER` | `postgres` | PostgreSQL username |
-| `POSTGRES_PASSWORD` | `postgres` | PostgreSQL password |
+| `POSTGRES_USER` | `moarchan` | PostgreSQL username |
+| `POSTGRES_PASSWORD` | `moarchan` | PostgreSQL password |
 | `POSTGRES_DB` | `moarchan` | Database name |
 | `POSTGRES_SSLMODE` | `disable` | SSL mode (`disable`, `require`, `verify-full`) |
 | `SESSION_HASH_KEY` | *(32 bytes)* | Secret key for deriving session master key |
@@ -132,8 +145,6 @@ docker-compose up --build
 | `UPLOAD_PATH` | `./static/images/uploads` | Local filesystem base path for media storage |
 | `UPLOAD_URL_PREFIX` | `/static/images/uploads` | Public URL prefix for uploaded media assets |
 | `VIEWS_PATH` | `./static/views` | Directory path containing HTML templates |
-| `TLS_CERT_PATH` | *(optional)* | Path to PEM-encoded TLS certificate file |
-| `TLS_KEY_PATH` | *(optional)* | Path to PEM-encoded TLS private key file |
 
 ---
 
@@ -142,7 +153,9 @@ docker-compose up --build
 ```
 .
 ├── Cargo.toml            # Project dependencies & build manifest
-├── docker-compose.yml    # Container orchestration setup
+├── Caddyfile             # Gateway config (HTTP/3 QUIC, TLS, proxying)
+├── Dockerfile            # Multi-stage Rust build & runtime container
+├── docker-compose.yml    # Multi-container orchestration (App, DB, Gateway)
 ├── .env                  # Local environment configuration (git-ignored)
 ├── src/
 │   ├── main.rs           # Application bootstrap, graceful shutdown & server launch
@@ -151,13 +164,13 @@ docker-compose up --build
 │   ├── error.rs          # Unified error handling & HTTP response conversion
 │   ├── db/
 │   │   ├── mod.rs        # DB module entrypoint
-│   │   ├── migrations.rs # Versioned transactional schema migrations
-│   │   └── queries.rs    # Domain SQL queries & aggregate builders
+│   │   ├── migrations.rs # Versioned transactional schema migrations (001-006)
+│   │   └── queries.rs    # Domain SQL queries & indexed aggregate builders
 │   ├── middleware/
 │   │   ├── mod.rs        # Middleware module entrypoint
-│   │   ├── csrf.rs       # Double-submit cookie CSRF middleware
-│   │   ├── rate_limit.rs # IPv6 /64 subnet-aware token-bucket rate limiter
-│   │   └── security.rs   # Content Security Policy (CSP) & defensive headers
+│   │   ├── csrf.rs       # Double-submit cookie CSRF middleware (timing-attack resistant)
+│   │   ├── rate_limit.rs # IPv6 /64 subnet & proxy-aware token-bucket rate limiter
+│   │   └── security.rs   # Alt-Svc advertisement, CSP & defensive headers
 │   ├── models/
 │   │   ├── mod.rs        # Models module entrypoint
 │   │   ├── auth.rs       # User authentication & session models
@@ -170,18 +183,18 @@ docker-compose up --build
 │   │   └── api/
 │   │       ├── mod.rs    # API subrouter
 │   │       ├── threads.rs# Thread creation & auto-pruning endpoint
-│   │       ├── replies.rs# Reply creation & bump limit endpoint
+│   │       ├── replies.rs# Reply creation, bump limit & backlink update endpoint
 │   │       ├── delete.rs # Post/file deletion endpoint
-│   │       └── stream.rs # Real-time SSE stream & lag recovery endpoint
+│   │       └── stream.rs # Real-time SSE stream & lag recovery (sync-required)
 │   ├── services/
 │   │   ├── mod.rs        # Services module entrypoint
 │   │   ├── auth.rs       # Bcrypt password verification & hashing
-│   │   ├── image.rs      # Thumbnailing, magic-byte checking & EXIF stripping
+│   │   ├── image.rs      # Thumbnailing, magic-byte checking, RGB8 alpha safety
 │   │   ├── sanitizer.rs  # HTML escaping, tripcode engine & quote parsing
-│   │   └── sse.rs        # Distributed Postgres LISTEN/NOTIFY SSE hub
+│   │   └── sse.rs        # Distributed Postgres LISTEN/NOTIFY SSE hub (origin-tagged)
 │   └── storage/
 │       ├── mod.rs        # Pluggable StorageBackend trait
-│       └── local.rs      # Concurrent local filesystem storage implementation
+│       └── local.rs      # Concurrent local filesystem storage with path sanitization
 └── static/
     ├── css/              # Reset, post, thread, reply & screen stylesheet rules
     ├── images/           # Application graphics & upload directory
@@ -199,7 +212,7 @@ docker-compose up --build
     │   └── controllers/
     │       ├── auth.js   # Auth controller (Demo)
     │       ├── main.js   # Homepage controller
-    │       └── service.js# Imageboard thread/reply orchestrator
+    │       └── service.js# Imageboard thread/reply orchestrator & real-time backlinks
     └── views/            # MiniJinja HTML templates
 ```
 
