@@ -52,14 +52,15 @@ pub async fn process_upload(
 
         let (orig_w, orig_h) = (dimensions.0, dimensions.1);
 
-        // 2. Fast integer sub-sampling for 250x250 thumbnail
+        // 2. Fast integer sub-sampling for 250x250 thumbnail with RGB conversion for alpha transparency support
         let dyn_img = image::load_from_memory_with_format(&raw_bytes, format)
             .map_err(|e| AppError::Image(format!("Image decode error: {e}")))?;
 
         let thumb_img = dyn_img.thumbnail(250, 250);
+        let rgb_thumb = thumb_img.to_rgb8();
         let mut thumb_bytes = Vec::with_capacity(24 * 1024);
         let mut thumb_encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut thumb_bytes, 85);
-        thumb_encoder.encode_image(&thumb_img).map_err(|e| AppError::Image(e.to_string()))?;
+        thumb_encoder.encode_image(&rgb_thumb).map_err(|e| AppError::Image(e.to_string()))?;
 
         let clean_basename = std::path::Path::new(&orig_name)
             .file_name()

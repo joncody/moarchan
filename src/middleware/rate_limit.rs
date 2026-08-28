@@ -7,7 +7,8 @@ use axum::{
 };
 use dashmap::DashMap;
 use std::{
-    net::SocketAddr,
+    net::{IpAddr, SocketAddr},
+    str::FromStr,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -65,6 +66,33 @@ impl IpRateLimiter {
     }
 }
 
+fn is_trusted_or_private(ip: &IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ipv4) => {
+            ipv4.is_loopback() || ipv4.is_private() || ipv4.is_link_local()
+        }
+        IpAddr::V6(ipv6) => {
+            ipv6.is_loopback()
+                || (ipv6.segments()[0] & 0xfe00) == 0xfc00
+                || (ipv6.segments()[0] & 0xffc0) == 0xfe80
+        }
+    }
+}
+
+fn mask_ip(raw_ip: &str) -> String {
+    if let Ok(addr) = IpAddr::from_str(raw_ip.trim()) {
+        match addr {
+            IpAddr::V4(v4) => v4.to_string(),
+            IpAddr::V6(v6) => {
+                let seg = v6.segments();
+                format!("{:x}:{:x}:{:x}:{:x}::/64", seg[0], seg[1], seg[2], seg[3])
+            }
+        }
+    } else {
+        raw_ip.to_string()
+    }
+}
+
 pub async fn rate_limit_middleware(
     State(limiter): State<Arc<IpRateLimiter>>,
     req: Request,
@@ -81,17 +109,18 @@ pub async fn rate_limit_middleware(
                     .map(|addr| addr.ip())
             });
 
-        let ip = if let Some(sock_ip) = socket_ip {
-            if sock_ip.is_loopback() {
+        let raw_ip = if let Some(sock_ip) = socket_ip {
+            if is_trusted_or_private(&sock_ip) {
                 req.headers()
                     .get("x-forwarded-for")
                     .and_then(|v| v.to_str().ok())
-                    .map(|s| s.split(',').next().unwrap_or("").trim().to_string())
+                    .and_then(|s| s.split(',').next())
+                    .map(|s| s.trim().to_string())
                     .or_else(|| {
                         req.headers()
                             .get("x-real-ip")
                             .and_then(|v| v.to_str().ok())
-                            .map(String::from)
+                            .map(|s| s.trim().to_string())
                     })
                     .unwrap_or_else(|| sock_ip.to_string())
             } else {
@@ -101,17 +130,20 @@ pub async fn rate_limit_middleware(
             req.headers()
                 .get("x-forwarded-for")
                 .and_then(|v| v.to_str().ok())
-                .map(|s| s.split(',').next().unwrap_or("").trim().to_string())
+                .and_then(|s| s.split(',').next())
+                .map(|s| s.trim().to_string())
                 .or_else(|| {
                     req.headers()
                         .get("x-real-ip")
                         .and_then(|v| v.to_str().ok())
-                        .map(String::from)
+                        .map(|s| s.trim().to_string())
                 })
                 .unwrap_or_else(|| "127.0.0.1".to_string())
         };
 
-        if !limiter.allow(&ip) {
+        let masked_ip = mask_ip(&raw_ip);
+
+        if !limiter.allow(&masked_ip) {
             return (
                 StatusCode::TOO_MANY_REQUESTS,
                 [("Retry-After", "60")],

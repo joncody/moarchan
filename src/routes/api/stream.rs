@@ -5,7 +5,7 @@ use axum::{
 use futures_util::StreamExt;
 use serde::Deserialize;
 use std::{convert::Infallible, time::Duration};
-use tokio_stream::wrappers::BroadcastStream;
+use tokio_stream::wrappers::{errors::BroadcastStreamRecvError, BroadcastStream};
 use crate::{error::AppError, state::AppState};
 
 #[derive(Deserialize)]
@@ -33,7 +33,16 @@ pub async fn sse_stream_handler(
                         None
                     }
                 }
-                _ => None,
+                Err(BroadcastStreamRecvError::Lagged(count)) => {
+                    tracing::warn!("SSE subscriber lagged behind by {count} events on topic '{topic}', emitting sync-required");
+                    let sync_payload = serde_json::json!({
+                        "topic": topic,
+                        "lagged_by": count,
+                        "action": "sync"
+                    });
+                    let data_str = serde_json::to_string(&sync_payload).unwrap_or_default();
+                    Some(Ok(Event::default().event("sync-required").data(data_str)))
+                }
             }
         }
     });

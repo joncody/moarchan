@@ -24,7 +24,8 @@ impl LocalDiskStorage {
 #[async_trait]
 impl StorageBackend for LocalDiskStorage {
     async fn save(&self, rel_path: &str, data: &[u8]) -> Result<(), AppError> {
-        let full_path = self.base_path.join(rel_path);
+        let clean_rel = rel_path.trim_start_matches(|c| c == '/' || c == '\\');
+        let full_path = self.base_path.join(clean_rel);
         if let Some(parent) = full_path.parent() {
             fs::create_dir_all(parent).await
                 .map_err(|e| AppError::Internal(anyhow::anyhow!("Create parent dir: {e}")))?;
@@ -35,7 +36,8 @@ impl StorageBackend for LocalDiskStorage {
     }
 
     async fn delete(&self, rel_path: &str) -> Result<(), AppError> {
-        let full_path = self.base_path.join(rel_path);
+        let clean_rel = rel_path.trim_start_matches(|c| c == '/' || c == '\\');
+        let full_path = self.base_path.join(clean_rel);
         if full_path.exists() {
             fs::remove_file(&full_path).await
                 .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to delete file {}: {e}", full_path.display())))?;
@@ -44,6 +46,7 @@ impl StorageBackend for LocalDiskStorage {
     }
 
     fn public_url(&self, rel_path: &str) -> String {
-        format!("{}/{}", self.url_prefix, rel_path.trim_start_matches('/'))
+        let clean_rel = rel_path.trim_start_matches(|c| c == '/' || c == '\\');
+        format!("{}/{}", self.url_prefix, clean_rel)
     }
 }

@@ -12,6 +12,8 @@ pub async fn get_topic_threads(pool: &PgPool, topic: &str) -> Result<Vec<Thread>
         SELECT
             t.hash, t.topic, t.name, COALESCE(t.subject, '') as subject, COALESCE(t.options, '') as options, t.comment,
             t.file_name, t.file_mime, t.file_size, t.file_dimensions, t.timestamp,
+            COALESCE(t.tagging, '[]'::jsonb) as tagging,
+            COALESCE(t.tagged_by, '[]'::jsonb) as tagged_by,
             COALESCE(
                 jsonb_agg(
                     jsonb_build_object(
@@ -32,12 +34,17 @@ pub async fn get_topic_threads(pool: &PgPool, topic: &str) -> Result<Vec<Thread>
                 ) FILTER (WHERE p.hash IS NOT NULL),
                 '[]'::jsonb
             ) as replies
-        FROM threads t
+        FROM (
+            SELECT * FROM threads
+            WHERE topic = $1
+            ORDER BY bumped_at DESC
+            LIMIT 100
+        ) t
         LEFT JOIN posts p ON t.hash = p.thread_hash
-        WHERE t.topic = $1
-        GROUP BY t.id, t.hash, t.bumped_at
+        GROUP BY t.id, t.hash, t.topic, t.name, t.subject, t.options, t.comment,
+                 t.file_name, t.file_mime, t.file_size, t.file_dimensions, t.timestamp,
+                 t.tagging, t.tagged_by, t.bumped_at
         ORDER BY t.bumped_at DESC
-        LIMIT 100
         "#
     )
     .bind(topic)
@@ -48,6 +55,10 @@ pub async fn get_topic_threads(pool: &PgPool, topic: &str) -> Result<Vec<Thread>
     for r in rows {
         let replies_json: Value = r.try_get("replies")?;
         let replies: Vec<Reply> = serde_json::from_value(replies_json).unwrap_or_default();
+        let tagging_json: Value = r.try_get("tagging")?;
+        let tagging: Vec<String> = serde_json::from_value(tagging_json).unwrap_or_default();
+        let tagged_by_json: Value = r.try_get("tagged_by")?;
+        let tagged_by: Vec<String> = serde_json::from_value(tagged_by_json).unwrap_or_default();
 
         threads.push(Thread {
             hash: r.try_get("hash")?,
@@ -62,8 +73,8 @@ pub async fn get_topic_threads(pool: &PgPool, topic: &str) -> Result<Vec<Thread>
             file_dimensions: r.try_get("file_dimensions")?,
             timestamp: r.try_get("timestamp")?,
             replies,
-            tagged_by: Vec::new(),
-            tagging: Vec::new(),
+            tagged_by,
+            tagging,
         });
     }
 
@@ -76,6 +87,8 @@ pub async fn get_single_thread(pool: &PgPool, topic: &str, hash: &str) -> Result
         SELECT
             t.hash, t.topic, t.name, COALESCE(t.subject, '') as subject, COALESCE(t.options, '') as options, t.comment,
             t.file_name, t.file_mime, t.file_size, t.file_dimensions, t.timestamp,
+            COALESCE(t.tagging, '[]'::jsonb) as tagging,
+            COALESCE(t.tagged_by, '[]'::jsonb) as tagged_by,
             COALESCE(
                 jsonb_agg(
                     jsonb_build_object(
@@ -99,7 +112,7 @@ pub async fn get_single_thread(pool: &PgPool, topic: &str, hash: &str) -> Result
         FROM threads t
         LEFT JOIN posts p ON t.hash = p.thread_hash
         WHERE t.topic = $1 AND t.hash = $2
-        GROUP BY t.id, t.hash
+        GROUP BY t.id, t.hash, t.tagging, t.tagged_by
         "#
     )
     .bind(topic)
@@ -110,6 +123,10 @@ pub async fn get_single_thread(pool: &PgPool, topic: &str, hash: &str) -> Result
     if let Some(r) = row {
         let replies_json: Value = r.try_get("replies")?;
         let replies: Vec<Reply> = serde_json::from_value(replies_json).unwrap_or_default();
+        let tagging_json: Value = r.try_get("tagging")?;
+        let tagging: Vec<String> = serde_json::from_value(tagging_json).unwrap_or_default();
+        let tagged_by_json: Value = r.try_get("tagged_by")?;
+        let tagged_by: Vec<String> = serde_json::from_value(tagged_by_json).unwrap_or_default();
 
         Ok(Some(Thread {
             hash: r.try_get("hash")?,
@@ -124,8 +141,8 @@ pub async fn get_single_thread(pool: &PgPool, topic: &str, hash: &str) -> Result
             file_dimensions: r.try_get("file_dimensions")?,
             timestamp: r.try_get("timestamp")?,
             replies,
-            tagged_by: Vec::new(),
-            tagging: Vec::new(),
+            tagged_by,
+            tagging,
         }))
     } else {
         Ok(None)

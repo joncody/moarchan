@@ -58,15 +58,17 @@ pub async fn create_thread_handler(
     let (timestamp, hash) = generate_unique_identifiers();
     let processed_image = process_upload(raw_bytes, &orig_filename, &hash, state.storage.as_ref()).await?;
 
-    let (comment, _) = sanitize_comment(&raw_comment);
+    let (comment, tags) = sanitize_comment(&raw_comment);
     let final_name = sanitize_name(&name, &state.config.session_hash_key);
     let final_subject = html_escape::encode_safe(&subject).to_string();
     let pass_hash = hash_password(&password).await?;
+    let tagging_json = serde_json::to_value(&tags).unwrap();
+    let tagged_by_json = serde_json::json!([]);
 
     sqlx::query(
         r#"
-        INSERT INTO threads (hash, topic, name, subject, options, password_hash, comment, file_name, file_mime, file_size, file_dimensions, timestamp)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        INSERT INTO threads (hash, topic, name, subject, options, password_hash, comment, file_name, file_mime, file_size, file_dimensions, timestamp, tagging, tagged_by)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
         "#
     )
     .bind(&hash)
@@ -81,6 +83,8 @@ pub async fn create_thread_handler(
     .bind(&processed_image.details.size)
     .bind(&processed_image.details.dimensions)
     .bind(&timestamp)
+    .bind(&tagging_json)
+    .bind(&tagged_by_json)
     .execute(&state.db)
     .await?;
 
@@ -156,7 +160,7 @@ pub async fn create_thread_handler(
         "timestamp": timestamp,
         "replies": [],
         "taggedBy": [],
-        "tagging": []
+        "tagging": tags
     });
 
     match state.render_template("thread-item", &thread_json) {

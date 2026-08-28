@@ -30,6 +30,7 @@ pub async fn csrf_middleware(mut req: Request, next: Next) -> Response {
         }
     }
 
+    let is_new_token = cookie_token.is_none();
     let token = match cookie_token {
         Some(t) => t,
         None => {
@@ -39,11 +40,8 @@ pub async fn csrf_middleware(mut req: Request, next: Next) -> Response {
         }
     };
 
-    let path = req.uri().path().to_string();
-    let is_auth_route = path.starts_with("/login") || path.starts_with("/register");
-
-    // Only enforce strict CSRF header matching on stateful auth routes or when CSRF header is explicitly supplied
-    if is_auth_route && matches!(req.method(), &Method::POST | &Method::PUT | &Method::DELETE) {
+    // Enforce double-submit CSRF token matching on all state-mutating requests
+    if matches!(req.method(), &Method::POST | &Method::PUT | &Method::DELETE | &Method::PATCH) {
         let header_token = req
             .headers()
             .get(CSRF_HEADER)
@@ -67,11 +65,14 @@ pub async fn csrf_middleware(mut req: Request, next: Next) -> Response {
     req.extensions_mut().insert(token.clone());
     let mut response = next.run(req).await;
 
-    let cookie_val = format!(
-        "{CSRF_COOKIE}={token}; Path=/; Max-Age=86400; SameSite=Lax"
-    );
-    if let Ok(hv) = HeaderValue::from_str(&cookie_val) {
-        response.headers_mut().append(header::SET_COOKIE, hv);
+    // Only issue Set-Cookie when establishing a new CSRF token
+    if is_new_token {
+        let cookie_val = format!(
+            "{CSRF_COOKIE}={token}; Path=/; Max-Age=86400; SameSite=Lax"
+        );
+        if let Ok(hv) = HeaderValue::from_str(&cookie_val) {
+            response.headers_mut().append(header::SET_COOKIE, hv);
+        }
     }
 
     response

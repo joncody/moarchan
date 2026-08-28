@@ -43,6 +43,8 @@ pub async fn run_migrations(pool: &PgPool) -> Result<(), AppError> {
                 file_size TEXT NOT NULL,
                 file_dimensions TEXT NOT NULL,
                 timestamp TEXT NOT NULL,
+                tagging JSONB DEFAULT '[]'::jsonb,
+                tagged_by JSONB DEFAULT '[]'::jsonb,
                 bumped_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                 created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
             );
@@ -94,6 +96,14 @@ pub async fn run_migrations(pool: &PgPool) -> Result<(), AppError> {
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_threads_topic_bumped ON threads(topic, bumped_at DESC);")
             .execute(&mut **tx).await?;
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_posts_thread_hash ON posts(thread_hash);")
+            .execute(&mut **tx).await?;
+        Ok(())
+    })).await?;
+
+    apply_migration(pool, "006_add_thread_tags", "Add tagging columns to threads if missing", |tx| Box::pin(async move {
+        sqlx::query("ALTER TABLE threads ADD COLUMN IF NOT EXISTS tagging JSONB DEFAULT '[]'::jsonb;")
+            .execute(&mut **tx).await?;
+        sqlx::query("ALTER TABLE threads ADD COLUMN IF NOT EXISTS tagged_by JSONB DEFAULT '[]'::jsonb;")
             .execute(&mut **tx).await?;
         Ok(())
     })).await?;

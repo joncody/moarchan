@@ -92,6 +92,7 @@ frame.controllers.service = function service() {
      * @param {string} data.thread - Target parent thread hash.
      * @param {string} data.html - Rendered reply HTML markup.
      * @param {string} [data.options] - Post options (e.g., 'sage').
+     * @param {string[]} [data.tagging] - List of quoted post hashes.
      * @returns {void}
      */
     function handleNewReply(data) {
@@ -111,6 +112,27 @@ frame.controllers.service = function service() {
             postActions.bindReplyEvents(replyEl);
             tagHover.bindTags();
             postActions.initReplies(data.thread);
+
+            // Update real-time backlink tags on quoted posts
+            if (Array.isArray(data.tagging)) {
+                data.tagging.forEach(function (quotedHash) {
+                    const targetHeader = dom("#post-" + quotedHash + " .post-header");
+                    if (targetHeader.length() > 0) {
+                        const existingTag = targetHeader.select("[data-tag='" + data.hash + "']");
+                        if (existingTag.length() === 0) {
+                            const newTagHtml = (
+                                "<span class=\"post-tag blue-text-link\" data-tag=\"" +
+                                data.hash +
+                                "\">&gt;&gt;" +
+                                data.hash +
+                                "</span>"
+                            );
+                            targetHeader.get(0).insertAdjacentHTML("beforeend", newTagHtml);
+                        }
+                    }
+                });
+                tagHover.bindTags();
+            }
 
             // In topic board view, bump thread to top of feed
             // unless 'sage' is specified
@@ -152,7 +174,17 @@ frame.controllers.service = function service() {
             postEl.select(".post-image-metadata").remove();
             postEl.select(".post-image-container").remove();
         } else {
-            postEl.remove();
+            const rawNode = postEl.get(0);
+            const replyContainer = (
+                rawNode && typeof rawNode.closest === "function"
+                ? rawNode.closest(".reply-container")
+                : null
+            );
+            if (replyContainer !== null) {
+                replyContainer.remove();
+            } else {
+                postEl.remove();
+            }
         }
     }
 
@@ -173,7 +205,10 @@ frame.controllers.service = function service() {
     const streamCleanup = frame.subscribeToStream(topic, {
         "delete-post": handleDeletePost,
         "new-reply": handleNewReply,
-        "new-thread": handleNewThread
+        "new-thread": handleNewThread,
+        "sync-required": function () {
+            frame.loadRoute(globalThis.location.pathname);
+        }
     });
 
     // 8. Unified Teardown Lifecycle

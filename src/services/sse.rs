@@ -1,16 +1,21 @@
 use tokio::sync::broadcast;
 use sqlx::postgres::PgListener;
 use serde_json::Value;
+use uuid::Uuid;
 use crate::{models::sse::SseEventEnvelope, state::AppState};
 
 pub struct SseHub {
+    pub instance_id: Uuid,
     tx: broadcast::Sender<SseEventEnvelope>,
 }
 
 impl SseHub {
     pub fn new() -> Self {
         let (tx, _) = broadcast::channel(1024);
-        Self { tx }
+        Self {
+            instance_id: Uuid::new_v4(),
+            tx,
+        }
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<SseEventEnvelope> {
@@ -21,11 +26,18 @@ impl SseHub {
         let envelope = SseEventEnvelope {
             topic: topic.to_string(),
             event: event.to_string(),
-            data: payload,
+            data: payload.clone(),
         };
 
-        // Notify cluster via PostgreSQL pg_notify
-        if let Ok(serialized) = serde_json::to_string(&envelope) {
+        // Notify cluster via PostgreSQL pg_notify with originating node tag
+        let notify_payload = serde_json::json!({
+            "topic": topic,
+            "event": event,
+            "origin": self.instance_id.to_string(),
+            "data": payload,
+        });
+
+        if let Ok(serialized) = serde_json::to_string(&notify_payload) {
             if serialized.len() <= 7500 {
                 let _ = sqlx::query("SELECT pg_notify('moarchan_events', $1)")
                     .bind(serialized)
@@ -36,6 +48,7 @@ impl SseHub {
                 let compact = serde_json::json!({
                     "topic": topic,
                     "event": event,
+                    "origin": self.instance_id.to_string(),
                     "fetch": true,
                     "hash": envelope.data.get("hash").and_then(|h| h.as_str()).unwrap_or("")
                 });
@@ -48,7 +61,7 @@ impl SseHub {
             }
         }
 
-        // Local in-process fanout
+        // Local in-process fanout for this instance
         let _ = self.tx.send(envelope);
     }
 
@@ -69,11 +82,18 @@ impl SseHub {
 
             tracing::info!("PostgreSQL LISTEN moarchan_events worker online");
 
+            let instance_str = state.sse_hub.instance_id.to_string();
+
             loop {
                 match listener.recv().await {
                     Ok(notification) => {
                         let payload_str = notification.payload();
                         if let Ok(val) = serde_json::from_str::<Value>(payload_str) {
+                            // Skip self-originated notifications already dispatched locally
+                            if val.get("origin").and_then(|o| o.as_str()) == Some(&instance_str) {
+                                continue;
+                            }
+
                             if let (Some(topic), Some(event)) = (
                                 val.get("topic").and_then(|t| t.as_str()),
                                 val.get("event").and_then(|e| e.as_str()),

@@ -121,6 +121,18 @@ pub async fn create_reply_handler(
         .bind(&tags)
         .execute(&mut *tx)
         .await?;
+
+        sqlx::query(
+            r#"
+            UPDATE threads
+            SET tagged_by = COALESCE(tagged_by, '[]'::jsonb) || $1::jsonb
+            WHERE hash = ANY($2) AND NOT (COALESCE(tagged_by, '[]'::jsonb) @> $1::jsonb)
+            "#
+        )
+        .bind(&tag_val)
+        .bind(&tags)
+        .execute(&mut *tx)
+        .await?;
     }
 
     let reply_count: i64 = sqlx::query_scalar(
