@@ -5,10 +5,10 @@
  */
 
 /**
- * Set of valid standard HTML tag names.
- * @type {Set<string>}
+ * Array of valid standard HTML tag names.
+ * @type {string[]}
  */
-const VALID_TAGS = new Set([
+const VALID_TAGS = [
     "a", "abbr", "address", "area", "article", "aside", "audio", "b",
     "base", "bdo", "blockquote", "body", "br", "button", "canvas",
     "caption", "cite", "code", "col", "colgroup", "dd", "del",
@@ -23,7 +23,7 @@ const VALID_TAGS = new Set([
     "strong", "style", "sub", "summary", "sup", "svg", "table",
     "tbody", "td", "template", "textarea", "tfoot", "th", "thead",
     "time", "title", "tr", "track", "u", "ul", "var", "video", "wbr"
-]);
+];
 
 /**
  * @typedef {Object} EventRegistryEntry
@@ -220,8 +220,8 @@ function dom(selector) {
          * @returns {DomApi}
          */
         addItem: function (val) {
-            const newElements = toElements(val);
-            elements = elements.concat(newElements);
+            const new_elements = toElements(val);
+            elements = elements.concat(new_elements);
             return api;
         },
         /**
@@ -255,10 +255,10 @@ function dom(selector) {
          * @returns {DomApi}
          */
         children: function () {
-            const childElements = elements.flatMap(function (el) {
+            const child_elements = elements.flatMap(function (el) {
                 return Array.from(el.children);
             });
-            return dom(childElements);
+            return dom(child_elements);
         },
         /**
          * Clones all elements in the collection.
@@ -266,9 +266,9 @@ function dom(selector) {
          * @returns {DomApi}
          */
         clone: function (deep) {
-            const isDeep = (deep !== false);
+            const is_deep = (deep !== false);
             const cloned = elements.map(function (el) {
-                return el.cloneNode(isDeep);
+                return el.cloneNode(is_deep);
             });
             return dom(cloned);
         },
@@ -282,8 +282,8 @@ function dom(selector) {
             if (typeof name !== "string") {
                 return api;
             }
-            const camelName = camelCase(name);
-            const kebabName = kebabCase(name);
+            const camel_name = camelCase(name);
+            const kebab_name = kebabCase(name);
             if (value === undefined) {
                 return elements.map(function (el) {
                     if (
@@ -291,18 +291,22 @@ function dom(selector) {
                         && typeof globalThis.getComputedStyle === "function"
                     ) {
                         const computed = globalThis.getComputedStyle(el);
-                        return computed.getPropertyValue(kebabName) || "";
+                        const val = computed.getPropertyValue(kebab_name);
+                        if (typeof val === "string") {
+                            return val;
+                        }
+                        return "";
                     }
                     return "";
                 });
             }
             if (value === null) {
                 elements.forEach(function (el) {
-                    el.style.removeProperty(kebabName);
+                    el.style.removeProperty(kebab_name);
                 });
             } else {
                 elements.forEach(function (el) {
-                    el.style[camelName] = String(value);
+                    el.style[camel_name] = String(value);
                 });
             }
             return api;
@@ -328,7 +332,7 @@ function dom(selector) {
                 });
             } else {
                 elements.forEach(function (el) {
-                    el.dataset[name] = value;
+                    el.dataset[name] = String(value);
                 });
             }
             return api;
@@ -379,6 +383,9 @@ function dom(selector) {
             if (typeof token !== "string" || token.trim() === "") {
                 return false;
             }
+            if (elements.length === 0) {
+                return false;
+            }
             return elements.every(function (el) {
                 return el.classList.contains(token);
             });
@@ -414,10 +421,12 @@ function dom(selector) {
          * @returns {DomApi}
          */
         next: function () {
-            const nextElements = elements.map(function (el) {
+            const next_elements = elements.map(function (el) {
                 return el.nextElementSibling;
-            }).filter(Boolean);
-            return dom(nextElements);
+            }).filter(function (el) {
+                return el !== null;
+            });
+            return dom(next_elements);
         },
         /**
          * Removes registered event listeners from elements.
@@ -427,7 +436,7 @@ function dom(selector) {
          * @returns {DomApi}
          */
         off: function (type, fn, capture) {
-            const isCapture = (capture === true);
+            const is_capture = (capture === true);
             if (!type) {
                 elements.forEach(function (el) {
                     const register = eventRegistry.get(el);
@@ -473,7 +482,7 @@ function dom(selector) {
                             function (item) {
                                 if (
                                     item.fn === fn
-                                    && item.capture === isCapture
+                                    && item.capture === is_capture
                                 ) {
                                     el.removeEventListener(
                                         type,
@@ -505,24 +514,24 @@ function dom(selector) {
          * @returns {DomApi}
          */
         on: function (type, fn, capture) {
-            const isCapture = (capture === true);
+            const is_capture = (capture === true);
             if (typeof type !== "string" || typeof fn !== "function") {
                 return api;
             }
             elements.forEach(function (el) {
                 let register = eventRegistry.get(el);
                 if (!register) {
-                    register = Object.create(null);
+                    register = {};
                     eventRegistry.set(el, register);
                 }
                 if (!register[type]) {
                     register[type] = [];
                 }
                 register[type].push({
-                    capture: isCapture,
+                    capture: is_capture,
                     fn
                 });
-                el.addEventListener(type, fn, isCapture);
+                el.addEventListener(type, fn, is_capture);
             });
             return api;
         },
@@ -534,14 +543,14 @@ function dom(selector) {
          * @returns {DomApi}
          */
         once: function (type, fn, capture) {
-            const isCapture = (capture === true);
+            const is_capture = (capture === true);
             if (typeof type !== "string" || typeof fn !== "function") {
                 return api;
             }
             elements.forEach(function (el) {
                 let wrapper;
                 wrapper = function (event) {
-                    el.removeEventListener(type, wrapper, isCapture);
+                    el.removeEventListener(type, wrapper, is_capture);
                     const register = eventRegistry.get(el);
                     if (register && register[type]) {
                         register[type] = register[type].filter(
@@ -560,17 +569,17 @@ function dom(selector) {
                 };
                 let register = eventRegistry.get(el);
                 if (!register) {
-                    register = Object.create(null);
+                    register = {};
                     eventRegistry.set(el, register);
                 }
                 if (!register[type]) {
                     register[type] = [];
                 }
                 register[type].push({
-                    capture: isCapture,
+                    capture: is_capture,
                     fn: wrapper
                 });
-                el.addEventListener(type, wrapper, isCapture);
+                el.addEventListener(type, wrapper, is_capture);
             });
             return api;
         },
@@ -579,20 +588,24 @@ function dom(selector) {
          * @returns {DomApi}
          */
         parents: function () {
-            const parentElements = elements.map(function (el) {
+            const parent_elements = elements.map(function (el) {
                 return el.parentElement;
-            }).filter(Boolean);
-            return dom(parentElements);
+            }).filter(function (el) {
+                return el !== null;
+            });
+            return dom(parent_elements);
         },
         /**
          * Returns previous element siblings wrapped in a new DomApi.
          * @returns {DomApi}
          */
         prev: function () {
-            const prevElements = elements.map(function (el) {
+            const prev_elements = elements.map(function (el) {
                 return el.previousElementSibling;
-            }).filter(Boolean);
-            return dom(prevElements);
+            }).filter(function (el) {
+                return el !== null;
+            });
+            return dom(prev_elements);
         },
         /**
          * Removes all matched elements from their parent nodes.
@@ -681,21 +694,18 @@ function dom(selector) {
          * @returns {DomApi}
          */
         siblings: function () {
-            const sibElements = [];
+            const sib_elements = [];
             elements.forEach(function (el) {
-                if (
-                    el.parentElement !== null
-                    && el.parentElement !== undefined
-                ) {
+                if (el.parentElement !== null) {
                     const children = Array.from(el.parentElement.children);
                     children.forEach(function (sib) {
-                        if (sib !== el && !sibElements.includes(sib)) {
-                            sibElements.push(sib);
+                        if (sib !== el && !sib_elements.includes(sib)) {
+                            sib_elements.push(sib);
                         }
                     });
                 }
             });
-            return dom(sibElements);
+            return dom(sib_elements);
         },
         /**
          * Gets or sets textContent for all elements in collection.
@@ -727,10 +737,10 @@ function dom(selector) {
                 return api;
             }
             const classes = token.trim().split(/\s+/);
-            const hasForce = (typeof force === "boolean");
+            const has_force = (typeof force === "boolean");
             elements.forEach(function (el) {
                 classes.forEach(function (c) {
-                    if (hasForce) {
+                    if (has_force) {
                         el.classList.toggle(c, force);
                     } else {
                         el.classList.toggle(c);
@@ -749,18 +759,20 @@ function dom(selector) {
  * @param {string} tag - Valid HTML element tag name.
  * @returns {DomApi} Frozen DOM manipulation API.
  */
-dom.create = Object.freeze(function (tag) {
+function create_element(tag) {
     if (typeof tag !== "string") {
         return dom();
     }
-    const cleanTag = tag.toLowerCase();
-    if (!VALID_TAGS.has(cleanTag)) {
+    const clean_tag = tag.toLowerCase();
+    if (VALID_TAGS.indexOf(clean_tag) === -1) {
         return dom();
     }
     if (document !== undefined) {
-        return dom(document.createElement(cleanTag));
+        return dom(document.createElement(clean_tag));
     }
     return dom();
-});
+}
+
+dom.create = Object.freeze(create_element);
 
 export default Object.freeze(dom);
